@@ -103,7 +103,7 @@ cockpit read-task npm:dev --lines 80      # tail of the "npm:dev" task output
 Talk to another agent (signed with your tab; the app presses Enter for you):
 
 ```sh
-cockpit list-tabs --json                  # `harness`: claudeCode, codex, antigravity… or null
+cockpit list-tabs --json                  # `harness`: pi, claudeCode, codex, antigravity… or null
 cockpit msg --to Reviewer "diff ready on feat/x, please review"
 # Reviewer receives: [from: <your label> · <your harness>] diff ready on …
 cockpit peers                             # who you were connected to (Agents graph)

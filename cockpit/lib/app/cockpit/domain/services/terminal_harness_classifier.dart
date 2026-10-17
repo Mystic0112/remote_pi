@@ -160,8 +160,18 @@ abstract class TerminalHarnessClassifier {
     return true;
   }
 
+  /// Interativo = TUI. `--mode rpc|json` e `-p` não são (a aba não é o agente
+  /// conversando); `--mode text` sem `-p` num TTY é o TUI de sempre.
+  // ponytail: o Pi grava `process.title = "pi"`, que apaga o argv do
+  // cmdline/ps logo após subir; o `--mode rpc` só é visto antes disso. A
+  // extensão do Cockpit (`PiHookInstallerImpl`) renomeia pra `pi-rpc`, que não
+  // casa com entry point nenhum.
   static bool _checkPi(List<String> args) {
     const adminSubcommands = {
+      'install',
+      'remove',
+      'update',
+      'list',
       'export',
       'auth',
       'config',
@@ -170,20 +180,20 @@ abstract class TerminalHarnessClassifier {
       'help',
       'doctor',
     };
+    const headlessModes = {'json', 'rpc'};
     for (int i = 0; i < args.length; i++) {
       final arg = args[i];
       if (arg == '-p' || arg == '--print') return false;
-      if (arg.startsWith('--mode=')) {
-        final modeVal = arg.substring('--mode='.length).toLowerCase();
-        if (modeVal == 'text' || modeVal == 'json' || modeVal == 'rpc') {
-          return false;
-        }
+      if (arg.startsWith('--mode=') &&
+          headlessModes.contains(
+            arg.substring('--mode='.length).toLowerCase(),
+          )) {
+        return false;
       }
-      if (arg == '--mode' && i + 1 < args.length) {
-        final modeVal = args[i + 1].toLowerCase();
-        if (modeVal == 'text' || modeVal == 'json' || modeVal == 'rpc') {
-          return false;
-        }
+      if (arg == '--mode' &&
+          i + 1 < args.length &&
+          headlessModes.contains(args[i + 1].toLowerCase())) {
+        return false;
       }
       if (i == 0 && adminSubcommands.contains(arg.toLowerCase())) return false;
     }

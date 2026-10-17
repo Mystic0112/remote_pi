@@ -36,6 +36,7 @@ class NewAgentDraft {
 /// Sheet "New agent" (estilo "Novo terminal" do Maestri). [taken] = rótulos em
 /// uso (minúsculos); [remote] desliga Browse/validação local da pasta (ela mora
 /// no host). Dialogs vivem fora dos providers da rota: tudo chega por parâmetro.
+/// O Pi, alvo principal do projeto, vem primeiro no quick start.
 Future<NewAgentDraft?> showNewAgentDialog(
   BuildContext context, {
   required List<HarnessSpec> harnesses,
@@ -47,7 +48,10 @@ Future<NewAgentDraft?> showNewAgentDialog(
   context: context,
   barrierColor: context.colors.scrim,
   builder: (_) => _NewAgentDialog(
-    harnesses: harnesses,
+    harnesses: [
+      ...harnesses.where((h) => h.kind == HarnessKind.pi),
+      ...harnesses.where((h) => h.kind != HarnessKind.pi),
+    ],
     taken: taken,
     root: root,
     remote: remote,

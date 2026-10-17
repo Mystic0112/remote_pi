@@ -65,11 +65,22 @@ when Antigravity, Cursor, Copilot, OpenCode and Pi are busy.**
   from an agent's right-click menu, which also has Focus, Rename and Close
   tab. `cockpit peers --json` reports `maestro: true` for it.
 
+- **Pi as a first-class agent**: Cockpit installs a small Pi extension
+  (`~/.pi/agent/extensions/cockpit-hook.js`, only when `~/.pi` exists) that
+  reports Pi's turns, approvals and edited files like the Claude Code and
+  Codex hooks, so Pi tabs get exact turn status, resume by session id, and
+  per-agent files. Pi comes first in the New agent quick start, and
+  `cockpit msg` / the graph intros reach Pi tabs like any other agent.
+
 ### Fixed
 
+- **`pi --mode text` is detected as an agent tab again**, and `pi install`,
+  `remove`, `update` and `list` are not; `pi --mode rpc` stays out even after
+  Pi rewrites its process title.
 - **Turn status for agents without hooks**: tabs running Antigravity,
-  Cursor, Copilot, OpenCode or Pi show the spinner while the agent prints and
-  go idle after ~3s of silence. Claude Code and Codex keep their hooks.
+  Cursor, Copilot or OpenCode (and Pi until its extension loads) show the
+  spinner while the agent prints and go idle after ~3s of silence. Claude
+  Code, Codex and Pi use their hooks.
 - **Session restore no longer guesses Claude** for an unknown harness name.
 
 ## [2.1.15] - 2026-10-11

@@ -112,4 +112,49 @@ void main() {
     expect(draft?.cwd, '/tmp');
     expect(draft?.monitor, isTrue);
   });
+
+  testWidgets('New agent: Pi vem primeiro no quick start e preenche pi', (
+    tester,
+  ) async {
+    NewAgentDraft? draft;
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: ShadcnApp(
+          theme: buildTheme(brightness: Brightness.dark),
+          home: Scaffold(
+            child: Builder(
+              builder: (context) => PrimaryButton(
+                onPressed: () async => draft = await showNewAgentDialog(
+                  context,
+                  harnesses: [
+                    for (final k in [
+                      HarnessKind.claudeCode,
+                      HarnessKind.codex,
+                      HarnessKind.pi,
+                    ])
+                      HarnessCatalog.getSpec(k)!,
+                  ],
+                  taken: const {},
+                  root: '/tmp',
+                  remote: false,
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    final piX = tester.getTopLeft(find.text('Pi')).dx;
+    expect(piX, lessThan(tester.getTopLeft(find.text('Claude Code')).dx));
+    expect(piX, lessThan(tester.getTopLeft(find.text('Codex')).dx));
+    await tester.tap(find.text('Pi'));
+    await tester.pump();
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+    expect(draft?.command, 'pi');
+    expect(draft?.label, 'Pi');
+  });
 }

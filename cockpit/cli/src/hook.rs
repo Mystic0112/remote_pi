@@ -1,10 +1,12 @@
 //! `cockpit hook` — helper que os agentes invocam nos hooks de ciclo de vida.
-//! Serve **dois harnesses**, instalados pelos `HookInstaller`s do app:
+//! Serve **três harnesses**, instalados pelos `HookInstaller`s do app:
 //!
 //! - **Claude Code** (`~/.claude/settings.json`)
 //! - **Codex CLI** (`~/.codex/hooks.json` + trust em `~/.codex/config.toml`)
+//! - **Pi** (`~/.pi/agent/extensions/cockpit-hook.js`): a extensão traduz os
+//!   eventos do Pi neste mesmo envelope (ver `PiHookInstallerImpl`)
 //!
-//! Os dois usam o mesmo envelope: um JSON pelo stdin com `hook_event_name`,
+//! Todos usam o mesmo envelope: um JSON pelo stdin com `hook_event_name`,
 //! `session_id`, `transcript_path` etc. Traduzimos num status de turno
 //! (working / waiting / idle) e mandamos pro Cockpit pelo mesmo socket da CLI,
 //! discriminado por ausência de `type:"cmd"`. Este helper é **agnóstico de
@@ -393,6 +395,23 @@ mod tests {
         ] {
             assert!(touched_files("PostToolUse", &ev).is_empty(), "{ev}");
         }
+    }
+
+    /// Contrato com a extensão do Pi (`PiHookInstallerImpl`): ela manda o
+    /// envelope do Claude, com o `edit`/`write` do Pi como `Edit`/`Write`.
+    #[test]
+    fn envelope_da_extensao_do_pi() {
+        assert_eq!(status_for("SessionStart", &json!({})), Some("idle"));
+        assert_eq!(status_for("UserPromptSubmit", &json!({})), Some("working"));
+        assert_eq!(status_for("PermissionRequest", &json!({})), Some("waiting"));
+        assert_eq!(status_for("Stop", &json!({})), Some("idle"));
+        let edit = json!({"hook_event_name": "PostToolUse", "tool_name": "Edit",
+            "tool_input": {"file_path": "src/a.ts"}, "cwd": "/repo"});
+        assert_eq!(touched_files("PostToolUse", &edit), vec!["/repo/src/a.ts"]);
+        // `ui_prompt_end` (PostToolUse sem ferramenta): working, sem arquivos.
+        let resume = json!({"hook_event_name": "PostToolUse", "cwd": "/repo"});
+        assert_eq!(status_for("PostToolUse", &resume), Some("working"));
+        assert!(touched_files("PostToolUse", &resume).is_empty());
     }
 
     #[test]

@@ -117,7 +117,7 @@ shows flags, output shape and the mistakes to avoid.
   `codex`, `antigravity`, `cursor`, `gitHubCopilot`, `openCode`, `pi`, or
   null), and `taskId` on task-output tabs (the id `read-task` accepts).
   Resolve a tab by its stable `label`, not the dynamic `title`. `working`
-  comes from hooks for Claude Code and Codex; for other agents it is inferred
+  comes from hooks for Claude Code, Codex and Pi; for other agents it is inferred
   from terminal output (busy while it prints, idle after ~3s of silence), so
   treat it as a hint there.
 - `cockpit list-workspaces [--json]` — open projects: `id` (opaque UUID),

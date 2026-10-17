@@ -3,6 +3,7 @@ import 'dart:ui' show Offset;
 import 'package:cockpit/app/cockpit/domain/entities/agent_message.dart';
 import 'package:cockpit/app/cockpit/ui/session/pane_item.dart';
 import 'package:cockpit/app/cockpit/ui/session/terminal_session.dart';
+import 'package:cockpit/app/cockpit/ui/viewmodels/agent_message_delivery.dart';
 import 'package:cockpit/app/core/ui/themes/agent_colors.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart' show Color;
@@ -246,7 +247,7 @@ Map<String, Object?> agentInfo(AgentGraphStore graph, String ws, PaneItem p) =>
       'id': p.id,
       'label': p.manualLabel,
       'title': p.title,
-      'harness': p is TerminalSession ? p.activeHarness?.name : null,
+      'harness': agentHarnessName(p),
       'working': p.isWorking,
       'maestro': graph.maestroOf(ws) == p.id,
     };

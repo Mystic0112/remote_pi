@@ -47,6 +47,11 @@ void deliverAgentMessage({
   );
 }
 
+/// Harness detectado na aba no wire (`HarnessKind.name`: `pi`, `claudeCode`…),
+/// `null` fora de agente: o `harness` de `list-tabs` e `peers`.
+String? agentHarnessName(PaneItem p) =>
+    p is TerminalSession ? p.activeHarness?.name : null;
+
 /// Nome do harness da aba (assinatura das mensagens e apresentações).
 String? agentKindLabel(PaneItem p) => switch (p) {
   TerminalSession(:final activeHarness?) =>

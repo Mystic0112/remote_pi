@@ -294,6 +294,64 @@ void main() {
           ),
           isNull,
         );
+        for (final sub in ['install', 'remove', 'update', 'list']) {
+          expect(
+            TerminalHarnessClassifier.classify(
+              executable: 'pi',
+              argv: ['pi', sub, 'npm:foo'],
+            ),
+            isNull,
+            reason: sub,
+          );
+        }
+      });
+
+      // npm global install: `pi` is a shim, the process is node + cli.js.
+      const piCli =
+          '/home/u/.nvm/versions/node/v22/lib/node_modules/'
+          '@earendil-works/pi-coding-agent/dist/bundle/cli.js';
+
+      test('node-wrapped launch (before Pi rewrites its title)', () {
+        expect(
+          TerminalHarnessClassifier.classify(
+            executable: 'node',
+            argv: ['node', piCli, '--session', 'abc'],
+          ),
+          equals(HarnessKind.pi),
+        );
+        expect(
+          TerminalHarnessClassifier.classify(
+            executable: 'node',
+            argv: ['node', piCli, '--mode', 'rpc'],
+          ),
+          isNull,
+        );
+      });
+
+      test('title rewritten: `pi` is the TUI, `pi-rpc` is not', () {
+        // What /proc/<pid>/cmdline shows after `process.title = "pi"` (args
+        // gone) and after the Cockpit extension renames a headless run.
+        expect(
+          TerminalHarnessClassifier.classify(executable: 'pi', argv: ['pi']),
+          equals(HarnessKind.pi),
+        );
+        expect(
+          TerminalHarnessClassifier.classify(
+            executable: 'pi-rpc',
+            argv: ['pi-rpc'],
+          ),
+          isNull,
+        );
+      });
+
+      test('--mode text without -p is the interactive TUI', () {
+        expect(
+          TerminalHarnessClassifier.classify(
+            executable: 'pi',
+            argv: ['pi', '--mode', 'text'],
+          ),
+          equals(HarnessKind.pi),
+        );
       });
     });
 

@@ -183,6 +183,7 @@ class TerminalSession extends PaneItem {
       onHarnessChanged: (newHarness) {
         if (_activeHarness != newHarness) {
           _activeHarness = newHarness;
+          if (newHarness == null) _hookHarness = null;
           if (!_usesOutputHeuristic) _stopOutputHeuristic();
           notifyListeners();
         }
@@ -321,6 +322,8 @@ class TerminalSession extends PaneItem {
     if (transcriptPath != null && transcriptPath.isNotEmpty) {
       this.transcriptPath = transcriptPath;
     }
+    if (harness != null) _hookHarness = harness;
+    if (!_usesOutputHeuristic) _stopOutputHeuristic();
 
     // Ciclo de vida do turno a partir da semântica do evento.
     if (isTurnStart) _turnActive = true;
@@ -380,6 +383,13 @@ class TerminalSession extends PaneItem {
     HarnessKind.codex,
   };
 
+  /// Quem reportou por hook nesta aba desde que o processo atual subiu. O Pi
+  /// só tem hook quando carregou a extensão do Cockpit (`PiHookInstallerImpl`,
+  /// instalada no boot e lida pelo Pi ao iniciar): o primeiro evento dela
+  /// (`SessionStart`) desliga a heurística; Pi sem a extensão (aberto antes
+  /// do boot, ou `~/.pi` ausente no boot) segue na heurística de saída.
+  AgentHarness? _hookHarness;
+
   /// Silêncio do PTY que encerra um turno inferido pela saída (o idle chega
   /// entre 1× e 2× isto: o timer só re-arma, nunca é recriado por chunk).
   // ponytail: heurística de saída — TUI que redesenha/anima parada (spinner,
@@ -400,7 +410,9 @@ class TerminalSession extends PaneItem {
 
   bool get _usesOutputHeuristic {
     final h = _activeHarness;
-    return h != null && !_hookDrivenHarnesses.contains(h);
+    return h != null &&
+        !_hookDrivenHarnesses.contains(h) &&
+        !(h == HarnessKind.pi && _hookHarness == AgentHarness.pi);
   }
 
   /// Status de turno para harness sem hook: saída do PTY = `working`; silêncio

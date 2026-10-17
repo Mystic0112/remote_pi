@@ -207,7 +207,7 @@ class CockpitCliHandler {
                 'working': s.isWorking,
                 // Harness detectado no processo da aba (`HarnessKind.name`:
                 // `claudeCode`, `antigravity`…), `null` fora de agente.
-                'harness': s is TerminalSession ? s.activeHarness?.name : null,
+                'harness': agentHarnessName(s),
                 // Aba em foco (a que `--focused` mira). Sempre no máximo uma.
                 'focused': s.id == focusedId,
               },
