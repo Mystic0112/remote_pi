@@ -1,6 +1,8 @@
 import 'dart:ui' show Offset;
 
 import 'package:cockpit/app/cockpit/domain/entities/agent_message.dart';
+import 'package:cockpit/app/cockpit/domain/entities/desktop_agent_app.dart';
+import 'package:cockpit/app/cockpit/ui/session/external_agent.dart';
 import 'package:cockpit/app/cockpit/ui/session/pane_item.dart';
 import 'package:cockpit/app/cockpit/ui/session/terminal_session.dart';
 import 'package:cockpit/app/cockpit/ui/viewmodels/agent_message_delivery.dart';
@@ -57,6 +59,64 @@ class AgentGraphStore extends ChangeNotifier {
 
   /// Abas com "Monitor activity" desligado: sem badge/som/notificação de fim.
   final Map<String, Set<String>> _unmonitored = {};
+
+  /// Nós externos (apps desktop via MCP) por workspace, por id `ext:<app>`.
+  /// Participam de links/maestro/cor como as abas.
+  final Map<String, Map<String, ExternalAgent>> _externals = {};
+
+  Iterable<ExternalAgent> get externals =>
+      _externals.values.expand((m) => m.values);
+
+  List<ExternalAgent> externalsOf(String ws) => [...?_externals[ws]?.values];
+
+  ExternalAgent? externalById(String id) {
+    for (final m in _externals.values) {
+      if (m[id] case final e?) return e;
+    }
+    return null;
+  }
+
+  /// Põe [app] no canvas de [ws]. Um nó por app no Cockpit inteiro (a entrada
+  /// MCP do app é uma só): se já estava em outro workspace, sai de lá.
+  ExternalAgent addExternal(
+    String ws,
+    DesktopAgentApp app, {
+    required String label,
+    required String workingDirectory,
+  }) {
+    final id = ExternalAgent.idFor(app);
+    for (final other in [..._externals.keys]) {
+      removeExternal(other, id);
+    }
+    final e = ExternalAgent(
+      app: app,
+      projectId: ws,
+      workingDirectory: workingDirectory,
+      label: label,
+    );
+    _externals.putIfAbsent(ws, () => {})[id] = e;
+    _changed(ws);
+    return e;
+  }
+
+  /// Tira o nó externo [id] do canvas com seus links, posição, cor e maestro.
+  void removeExternal(String ws, String id) {
+    final e = _externals[ws]?.remove(id);
+    if (e == null) return;
+    _links[ws]?.removeWhere((p) => p.$1 == id || p.$2 == id);
+    if (_maestro[ws] == id) _maestro.remove(ws);
+    _positions[ws]?.remove(id);
+    _colors[ws]?.remove(id);
+    e.dispose();
+    _changed(ws);
+  }
+
+  void renameExternal(String id, String label) {
+    final e = externalById(id);
+    if (e == null) return;
+    e.setManualLabel(label);
+    _changed(e.projectId);
+  }
 
   String? maestroOf(String ws) => _maestro[ws];
 
@@ -160,8 +220,14 @@ class AgentGraphStore extends ChangeNotifier {
     return missing;
   }
 
-  /// JSON do workspace, já **sem** o que referencia abas mortas ([live]).
-  Map<String, Object?> toJson(String ws, Set<String> live) => {
+  /// JSON do workspace, já **sem** o que referencia abas mortas ([tabs]); os
+  /// nós externos contam como vivos.
+  Map<String, Object?> toJson(String ws, Set<String> tabs) {
+    final live = {...tabs, ...?_externals[ws]?.keys};
+    return _toJson(ws, live);
+  }
+
+  Map<String, Object?> _toJson(String ws, Set<String> live) => {
     'positions': {
       for (final e in (_positions[ws] ?? const <String, Offset>{}).entries)
         if (live.contains(e.key)) e.key: [e.value.dx, e.value.dy],
@@ -179,6 +245,10 @@ class AgentGraphStore extends ChangeNotifier {
       for (final id in _unmonitored[ws] ?? const <String>{})
         if (live.contains(id)) id,
     ],
+    'externals': [
+      for (final e in externalsOf(ws))
+        {'app': e.app.id, 'label': e.displayTitle, 'cwd': e.workingDirectory},
+    ],
   };
 
   /// Re-hidrata do doc de layout. [remap] = ids de aba trocados no restore
@@ -193,6 +263,9 @@ class AgentGraphStore extends ChangeNotifier {
     _maestro.remove(ws);
     _colors.remove(ws);
     _unmonitored.remove(ws);
+    for (final e in _externals.remove(ws)?.values ?? const <ExternalAgent>[]) {
+      e.dispose();
+    }
     if (json is! Map) return;
     String id(Object? raw) => remap[raw] ?? raw.toString();
     final positions = json['positions'];
@@ -227,6 +300,32 @@ class AgentGraphStore extends ChangeNotifier {
     if (json['unmonitored'] case final List ids) {
       _unmonitored[ws] = {for (final i in ids.whereType<String>()) id(i)};
     }
+    // ponytail: o mesmo app restaurado em dois workspaces fica nos dois;
+    // `externalById` acha o primeiro. Re-adicionar pelo dialog resolve.
+    if (json['externals'] case final List list) {
+      for (final raw in list) {
+        if (raw case {'app': final String appId, 'label': final String label}) {
+          final app = DesktopAgentApp.fromId(appId);
+          if (app == null) continue;
+          _externals.putIfAbsent(ws, () => {})[ExternalAgent.idFor(
+            app,
+          )] = ExternalAgent(
+            app: app,
+            projectId: ws,
+            workingDirectory: raw['cwd'] is String ? raw['cwd'] : '',
+            label: label,
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final e in [...externals]) {
+      e.dispose();
+    }
+    super.dispose();
   }
 
   void _changed(String ws) {
@@ -241,7 +340,7 @@ const int kGraphColumns = 4;
 const double kGraphCellWidth = 280;
 const double kGraphCellHeight = 170;
 
-/// Um agente na saída de `cockpit peers`.
+/// Um agente na saída de `peers`/`agents` (CLI e MCP).
 Map<String, Object?> agentInfo(AgentGraphStore graph, String ws, PaneItem p) =>
     {
       'id': p.id,
@@ -250,24 +349,50 @@ Map<String, Object?> agentInfo(AgentGraphStore graph, String ws, PaneItem p) =>
       'harness': agentHarnessName(p),
       'working': p.isWorking,
       'maestro': graph.maestroOf(ws) == p.id,
+      if (p is ExternalAgent) ...{'app': p.app.id, 'online': p.online},
     };
 
 /// Saída do `cockpit peers`: os links definidos de [caller] que ainda existem
-/// (abas de [sessions]).
+/// (abas de [sessions] ou nós externos).
 List<Map<String, Object?>> agentPeers(
   AgentGraphStore graph,
   PaneItem caller,
   Iterable<PaneItem> sessions,
 ) {
-  final byId = {for (final s in sessions) s.id: s};
+  final byId = {
+    for (final s in [...sessions, ...graph.externals]) s.id: s,
+  };
   return [
     for (final id in graph.peersOf(caller.projectId, caller.id))
       if (byId[id] case final peer?) agentInfo(graph, caller.projectId, peer),
   ];
 }
 
-/// Nós do canvas de [ws]: abas com agente detectado.
-List<PaneItem> workspaceAgentNodes(String ws, Iterable<PaneItem> sessions) => [
+/// Nós do canvas de [ws]: abas com agente detectado + nós externos.
+List<PaneItem> workspaceAgentNodes(
+  AgentGraphStore graph,
+  String ws,
+  Iterable<PaneItem> sessions,
+) => [
   for (final s in sessions)
     if (s is TerminalSession && s.projectId == ws && s.activeHarness != null) s,
+  ...graph.externalsOf(ws),
 ];
+
+/// Saída do `agents` (o `list_agents` do MCP): todo agente do workspace de
+/// [caller], com `linked` = ligado a ele.
+List<Map<String, Object?>> workspaceAgentList(
+  AgentGraphStore graph,
+  PaneItem caller,
+  Iterable<PaneItem> sessions,
+) {
+  final ws = caller.projectId;
+  return [
+    for (final p in workspaceAgentNodes(graph, ws, sessions))
+      if (p.id != caller.id)
+        {
+          ...agentInfo(graph, ws, p),
+          'linked': graph.isLinked(ws, caller.id, p.id),
+        },
+  ];
+}

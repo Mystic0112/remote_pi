@@ -1,4 +1,5 @@
 import 'package:cockpit/app/cockpit/domain/entities/agent_message.dart';
+import 'package:cockpit/app/cockpit/domain/entities/desktop_agent_app.dart';
 import 'package:cockpit/app/cockpit/ui/viewmodels/agent_graph_store.dart';
 import 'package:cockpit/app/cockpit/ui/widgets/agent_graph_painter.dart';
 import 'package:cockpit/app/cockpit/ui/widgets/agent_graph_parts.dart';
@@ -156,5 +157,55 @@ void main() {
     await tester.pumpAndSettle();
     expect(draft?.command, 'pi');
     expect(draft?.label, 'Pi');
+  });
+
+  testWidgets('New agent: desktop app troca o form e exige o aceite', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    NewAgentDraft? draft;
+    const cursor = DesktopAppIntegration(
+      app: DesktopAgentApp.cursor,
+      configPath: '/home/u/.cursor/mcp.json',
+      entry: '"cockpit": {}',
+    );
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: ShadcnApp(
+          theme: buildTheme(brightness: Brightness.dark),
+          home: Scaffold(
+            child: Builder(
+              builder: (context) => PrimaryButton(
+                onPressed: () async => draft = await showNewAgentDialog(
+                  context,
+                  harnesses: const [],
+                  desktopApps: const [cursor],
+                  taken: const {},
+                  root: '/nao/existe',
+                  remote: false,
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cursor'));
+    await tester.pump();
+    expect(find.text('/home/u/.cursor/mcp.json'), findsOneWidget);
+    expect(find.text('Working directory'), findsNothing);
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+    expect(draft, isNull, reason: 'sem o aceite não cria');
+    await tester.tap(find.textContaining('Add the Cockpit MCP server'));
+    await tester.pump();
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+    expect(draft?.desktop?.app, DesktopAgentApp.cursor);
+    expect(draft?.label, 'Cursor');
   });
 }

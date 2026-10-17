@@ -202,10 +202,12 @@ class _CockpitBootstrapperState extends State<CockpitBootstrapper> {
         // e independentes. Desktop-only (mobile não tem ~/.claude, ~/.codex
         // nem ~/.pi, plano 59).
         if (!isMobilePlatform) {
-          for (final installer in const <HookInstaller>[
-            ClaudeHookInstallerImpl(),
-            CodexHookInstallerImpl(),
-            PiHookInstallerImpl(),
+          for (final installer in <HookInstaller>[
+            const ClaudeHookInstallerImpl(),
+            CodexHookInstallerImpl(
+              installMcp: settings.settings.codexMcpIntegration,
+            ),
+            const PiHookInstallerImpl(),
           ]) {
             unawaited(
               installer.ensureInstalled().then((r) {

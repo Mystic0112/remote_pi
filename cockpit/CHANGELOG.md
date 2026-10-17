@@ -64,6 +64,23 @@ when Antigravity, Cursor, Copilot, OpenCode and Pi are busy.**
   peers, and shows a badge on its card. Set it in the New agent dialog or
   from an agent's right-click menu, which also has Focus, Rename and Close
   tab. `cockpit peers --json` reports `maestro: true` for it.
+- **Desktop agent apps on the graph**: New agent → **Desktop apps** lists
+  Claude Desktop, Cursor, Antigravity and Codex (ChatGPT) when installed.
+  Cockpit shows the exact entry it adds to the app's MCP config, backs the
+  file up, adds only the `cockpit` server (others untouched), opens the app
+  and puts it on the canvas with a "desktop" badge, online/offline/working
+  status, links, maestro and color. Restart the app if it was already open.
+- **`cockpit mcp --agent <app>`**: the MCP server those apps run. Tools
+  `peers`, `send`, `wait_messages` and `list_agents`; messages to a desktop
+  app (`cockpit msg --to <its label>`, role, initial task, intros) wait in a
+  queue until it calls `wait_messages`. A desktop app can be the maestro.
+- **Codex in Cockpit terminals joins the Agents graph through MCP.** Codex's
+  sandbox blocks the `cockpit` shell CLI, so Cockpit now adds a `cockpit` MCP
+  server to `~/.codex/config.toml` at boot (one entry shared with the Codex
+  desktop app; backup kept, nothing else touched). Under a Cockpit tab it acts
+  as that tab: `send`, `peers`, `list_agents`, and `wait_messages` for the
+  messages that reached the tab since the last call. Intros sent to a Codex
+  tab point to these tools instead of `cockpit msg`.
 
 - **Pi as a first-class agent**: Cockpit installs a small Pi extension
   (`~/.pi/agent/extensions/cockpit-hook.js`, only when `~/.pi` exists) that
@@ -82,6 +99,28 @@ when Antigravity, Cursor, Copilot, OpenCode and Pi are busy.**
   spinner while the agent prints and go idle after ~3s of silence. Claude
   Code, Codex and Pi use their hooks.
 - **Session restore no longer guesses Claude** for an unknown harness name.
+- **`wait_messages` no longer times out in Claude Desktop**: one call waits
+  at most 55s (default 45), under the ~60s request limit of desktop MCP
+  clients. Call it again to keep waiting.
+- **Codex tabs no longer show up as "codex-desktop" in the Agents graph.**
+  Codex runs its MCP servers from a shared background daemon, so Cockpit
+  could not tell which tab was calling. The `cockpit` MCP tools now take a
+  `from` (your tab id), and the connection message Cockpit types into a
+  Codex tab says which id to pass.
+- **`from` can no longer impersonate another tab.** Each connection message
+  typed into a Codex tab now carries a secret `from_token` (new on every
+  intro, gone when the tab closes); the `cockpit` MCP tools reject a `from`
+  without that tab's current token.
+- **The app socket is owner-only.** `~/.cockpit` is now 0700 and
+  `status[-debug].sock` 0600 right after bind; before, they followed the
+  umask (0775 / `srwxrwxr-x` on umask 002, so group members could connect).
+- **Desktop app integrations can be removed.** Settings → Automations lists
+  each desktop app with its MCP config path and whether the `cockpit` entry
+  is there, with Add/Remove; "Remove from canvas" on a desktop node can also
+  remove it. Only the `cockpit` entry leaves the file (backup kept, nothing
+  restored over your edits). For Codex the entry is shared with Codex in
+  Cockpit terminals, so removing it also stops Cockpit from adding it back at
+  startup (Add turns that back on).
 
 ## [2.1.15] - 2026-10-11
 

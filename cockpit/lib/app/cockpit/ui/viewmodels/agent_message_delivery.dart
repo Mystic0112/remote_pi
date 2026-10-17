@@ -1,6 +1,7 @@
 import 'dart:async' show Timer;
 
 import 'package:cockpit/app/cockpit/domain/entities/agent_message.dart';
+import 'package:cockpit/app/cockpit/ui/session/external_agent.dart';
 import 'package:cockpit/app/cockpit/ui/session/pane_item.dart';
 import 'package:cockpit/app/cockpit/ui/session/terminal_session.dart';
 import 'package:cockpit/app/cockpit/ui/viewmodels/agent_message_log.dart';
@@ -15,7 +16,8 @@ const Duration kAgentMessageSubmitDelay = Duration(milliseconds: 400);
 /// do grafo), assinado como [senderName] · [senderHarness]. Terminal: digita
 /// `[from: …] <text>` em [target] e aperta Enter depois do delay; [paste] manda
 /// como colagem (bracketed paste, se o TUI pediu): texto multilinha não
-/// submete no meio. Registra [text] no [log] como [from] → [target].
+/// submete no meio. Nó externo ([ExternalAgent]): vai pra fila dele (sai no
+/// `wait_messages` do MCP). Registra [text] no [log] como [from] → [target].
 void deliverAgentMessage({
   required AgentMessageLog log,
   required PaneItem from,
@@ -26,17 +28,23 @@ void deliverAgentMessage({
   required bool Function() targetAlive,
   bool paste = false,
 }) {
-  if (target is! TerminalSession) return;
-  final line = AgentMessage.formatLine(
-    senderName: senderName,
-    senderHarness: senderHarness,
-    text: text,
-  );
-  paste ? target.terminal.paste(line) : target.insertText(line);
-  Timer(kAgentMessageSubmitDelay, () {
-    // A aba pode ter fechado na janela do delay: PTY morto não recebe.
-    if (targetAlive()) target.insertText('\r');
-  });
+  switch (target) {
+    case ExternalAgent():
+      target.enqueue(AgentMessage.signature(senderName, senderHarness), text);
+    case TerminalSession():
+      final line = AgentMessage.formatLine(
+        senderName: senderName,
+        senderHarness: senderHarness,
+        text: text,
+      );
+      paste ? target.terminal.paste(line) : target.insertText(line);
+      Timer(kAgentMessageSubmitDelay, () {
+        // A aba pode ter fechado na janela do delay: PTY morto não recebe.
+        if (targetAlive()) target.insertText('\r');
+      });
+    default:
+      return;
+  }
   log.record(
     fromTabId: from.id,
     fromWorkspaceId: from.projectId,
@@ -52,27 +60,86 @@ void deliverAgentMessage({
 String? agentHarnessName(PaneItem p) =>
     p is TerminalSession ? p.activeHarness?.name : null;
 
-/// Nome do harness da aba (assinatura das mensagens e apresentações).
+/// Nome do harness da aba ou do app desktop do nó externo (assinatura das
+/// mensagens e apresentações).
 String? agentKindLabel(PaneItem p) => switch (p) {
   TerminalSession(:final activeHarness?) =>
     HarnessCatalog.getSpec(activeHarness)?.label ?? activeHarness.name,
+  ExternalAgent(:final app) => app.label,
   _ => null,
 };
 
-/// Apresentação que um agente recebe ao ser ligado a [peer] no grafo. Texto
-/// pro agente (inglês de propósito, como toda saída da CLI).
-String linkIntroText(PaneItem peer) {
+/// Por onde um agente fala com os outros — muda o texto das apresentações.
+enum AgentChannel {
+  /// `cockpit msg` / `cockpit peers` no terminal.
+  shell,
+
+  /// Nó externo (app desktop): ferramentas do MCP; nada é empurrado, as
+  /// respostas esperam o `wait_messages`.
+  mcpQueue,
+
+  /// Codex numa aba: o sandbox dele bloqueia a CLI de shell (env e socket),
+  /// então fala pelas ferramentas do servidor MCP `cockpit`; o que chega pra
+  /// ele continua sendo digitado no terminal.
+  mcpTab,
+}
+
+AgentChannel agentChannel(PaneItem p) => switch (p) {
+  ExternalAgent() => AgentChannel.mcpQueue,
+  TerminalSession(activeHarness: HarnessKind.codex) => AgentChannel.mcpTab,
+  _ => AgentChannel.shell,
+};
+
+/// [selfId] = a aba que recebe: o MCP do Codex é spawnado pelo daemon dele,
+/// fora da aba, e só sabe quem chama pelo `from` + [token] (ver
+/// `actAsMcpFrom`).
+String _mcpTabNote(String selfId, String token) =>
+    'You are Cockpit tab $selfId. Use the tools of the `cockpit` MCP server '
+    '(the `cockpit` shell commands are blocked by your sandbox), and always '
+    'pass from: "$selfId" and from_token: "$token" when calling them (this '
+    'token replaces any earlier one).';
+
+/// Token do `from` pra apresentação que [self] vai receber: aba Codex
+/// ([AgentChannel.mcpTab]) ganha um novo a cada apresentação (o anterior para
+/// de valer); os outros canais não usam (`''`).
+String mcpFromTokenFor(PaneItem self) =>
+    self is TerminalSession && agentChannel(self) == AgentChannel.mcpTab
+    ? self.rotateMcpFromToken()
+    : '';
+
+/// Apresentação que [self] recebe ao ser ligado a [peer] no grafo. Texto pro
+/// agente (inglês de propósito, como toda saída da CLI). [via] = o canal de
+/// quem RECEBE ([agentChannel] dele); [selfId] = o id dele e [token] o
+/// [mcpFromTokenFor] dele (usados no [AgentChannel.mcpTab]).
+String linkIntroText(
+  PaneItem peer, {
+  AgentChannel via = AgentChannel.shell,
+  String selfId = '',
+  String token = '',
+}) {
   final name = agentKindLabel(peer);
   final raw = peer.manualLabel ?? peer.id;
-  // Label com espaço/parêntese quebraria o `--to` no shell: vai entre aspas.
+  // Label com espaço/parêntese ("Claude Desktop", "Codex (ChatGPT)") quebraria
+  // o `--to` no shell: vai entre aspas.
   final address = RegExp(r'^[\w.:-]+$').hasMatch(raw) ? raw : '"$raw"';
   return 'You are now connected to ${peer.displayTitle}'
       '${name == null ? '' : ' ($name)'}. '
-      'Talk to it with: cockpit msg --to $address "..."';
+      '${switch (via) {
+        AgentChannel.shell => 'Talk to it with: cockpit msg --to $address "..."',
+        AgentChannel.mcpQueue => 'Talk to it with the send tool (to: $address); its replies are queued for you: collect them with wait_messages.',
+        AgentChannel.mcpTab => '${_mcpTabNote(selfId, token)} Talk to it with the send tool (to: $address); its replies are typed into your terminal (wait_messages also returns them).',
+      }}';
 }
 
 /// Apresentação que o maestro recebe: todos os [peers] e como coordená-los.
-String maestroIntroText(Iterable<PaneItem> peers) {
+/// [via] = o canal do maestro ([agentChannel]); [selfId] = o id dele e
+/// [token] o [mcpFromTokenFor] dele.
+String maestroIntroText(
+  Iterable<PaneItem> peers, {
+  AgentChannel via = AgentChannel.shell,
+  String selfId = '',
+  String token = '',
+}) {
   final list = [
     for (final p in peers)
       switch (agentKindLabel(p)) {
@@ -83,8 +150,11 @@ String maestroIntroText(Iterable<PaneItem> peers) {
   return 'You are the maestro of this workspace: you are connected to every '
       'agent on the canvas and coordinate them. Agents: '
       '${list.isEmpty ? '(none yet)' : list.join(', ')}. '
-      'Message one with: cockpit msg --to <label> "..."; list them anytime '
-      'with: cockpit peers';
+      '${switch (via) {
+        AgentChannel.shell => 'Message one with: cockpit msg --to <label> "..."; list them anytime with: cockpit peers',
+        AgentChannel.mcpQueue => 'Message one with the send tool (to: <label>). Replies are not pushed to you: they are queued, so call wait_messages after dispatching work to collect them. List agents anytime with peers (connected) or list_agents (whole workspace).',
+        AgentChannel.mcpTab => '${_mcpTabNote(selfId, token)} Message one with the send tool (to: <label>); replies are typed into your terminal (wait_messages also returns them). List agents anytime with peers (connected) or list_agents (whole workspace).',
+      }}';
 }
 
 /// Intervalo entre mensagens seguidas pro MESMO alvo: a anterior precisa
@@ -101,8 +171,10 @@ void deliverQueued({
   required List<(PaneItem, String)> items,
   required bool Function() targetAlive,
 }) {
+  // Fila de nó externo não tem Enter a esperar: tudo de uma vez.
+  final gap = target is ExternalAgent ? Duration.zero : kAgentMessageQueueGap;
   for (final (i, (from, text)) in items.indexed) {
-    Timer(kAgentMessageQueueGap * i, () {
+    Timer(gap * i, () {
       if (!targetAlive()) return;
       deliverAgentMessage(
         log: log,
@@ -127,7 +199,12 @@ void sendLinkIntros({
   required bool Function(PaneItem) alive,
 }) {
   for (final (self, peer) in [(a, b), (b, a)]) {
-    final text = linkIntroText(peer);
+    final text = linkIntroText(
+      peer,
+      via: agentChannel(self),
+      selfId: self.id,
+      token: mcpFromTokenFor(self),
+    );
     deliverAgentMessage(
       log: log,
       from: peer,

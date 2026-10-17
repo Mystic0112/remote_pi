@@ -57,6 +57,9 @@ USAGE:
   cockpit install-skill   [--agent <a>] [--force]
                                                install the agent skills (claude,
                                                codex, pi, antigravity)
+  cockpit mcp --agent <app-id>                 stdio MCP server for a desktop agent
+                                               app (claude-desktop, cursor,
+                                               antigravity-ide, codex-desktop)
   cockpit --help | --version
 
 READ (read-tab / read-task):
@@ -107,6 +110,29 @@ MSG:
   tab's detected `harness` (claudeCode, codex, antigravity, …) or null.
   `cockpit peers` lists the agents your tab was connected to in the Agents
   graph (topbar → Visualize agents): message those with `msg --to <label|id>`.
+  A desktop app on the graph (Claude Desktop, Cursor…) is messaged the same
+  way; its message is queued until the app calls its `wait_messages` tool.
+
+MCP:
+  cockpit mcp --agent claude-desktop   (the app runs it; you normally don't)
+  Desktop agent apps join the Agents graph through this server: Cockpit's New
+  agent dialog → Desktop apps writes the `cockpit` entry into the app's MCP
+  config (backup kept). Tools: peers, send {to, text}, wait_messages
+  {timeout_seconds?: 45, max 55; call again to keep waiting}, list_agents.
+  Pull model: nothing is pushed to the app — messages to it are queued and
+  returned by wait_messages.
+  Under a Cockpit terminal tab it acts AS that tab (the app finds its pid in
+  the tab's process tree): that is how Codex talks to other agents, since its
+  sandbox blocks this shell CLI. Cockpit adds the entry to
+  ~/.codex/config.toml at boot. wait_messages then returns the messages to the
+  tab since the last call (they are also typed into the terminal).
+  Codex's shared daemon may spawn it outside the tab: then every tool takes
+  `from` (tab id) + `from_token`, both given in the latest connection message
+  Cockpit typed into that tab; `from` without its current token is rejected.
+  Settings → Automations → Desktop app integrations removes just the `cockpit`
+  entry (backup kept); for Codex it also stops the re-add at boot.
+  Finds the app via ~/.cockpit/status[-debug].sock (owner-only, 0600 in a
+  0700 dir; Windows: status.json).
 
 IDS:
   Workspace ids are opaque UUIDs — use `workspacePath` (list-tabs) / `path`

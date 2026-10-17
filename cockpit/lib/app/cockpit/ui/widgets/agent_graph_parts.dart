@@ -1,3 +1,4 @@
+import 'package:cockpit/app/cockpit/domain/entities/desktop_agent_app.dart';
 import 'package:cockpit/app/cockpit/ui/widgets/agent_graph_painter.dart';
 import 'package:cockpit/app/core/ui/themes/themes.dart';
 import 'package:cockpit/i18n/strings.g.dart';
@@ -105,3 +106,29 @@ class CableTip extends StatelessWidget {
     );
   }
 }
+
+/// Frase da falha de integração de um app desktop (erro tipado → i18n).
+String desktopAppErrorMessage(BuildContext context, DesktopAppError e) {
+  final tr = context.t.cockpit.agentGraph.integrationError;
+  final detail = e.detail ?? '';
+  return switch (e.kind) {
+    DesktopAppErrorKind.invalidConfig => tr.invalidConfig(path: detail),
+    DesktopAppErrorKind.cliMissing => tr.cliMissing(path: detail),
+    DesktopAppErrorKind.writeFailed => tr.writeFailed(detail: detail),
+  };
+}
+
+/// Aviso curto do canvas (canto inferior direito).
+void showGraphToast(BuildContext context, String message) => showToast(
+  context: context,
+  location: ToastLocation.bottomRight,
+  builder: (context, overlay) => SurfaceCard(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 360),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Text(message, style: context.typo.label),
+      ),
+    ),
+  ),
+);

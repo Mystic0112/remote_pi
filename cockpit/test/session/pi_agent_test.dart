@@ -102,10 +102,11 @@ void main() {
     expect(agentHarnessName(pi.tab), 'pi');
     expect(agentHarnessName(shell.tab), isNull);
     expect(agentKindLabel(pi.tab), 'Pi');
-    expect(workspaceAgentNodes('ws', tabs).map((s) => s.id), [
-      't1',
-      't3',
-    ], reason: 'shell puro não vira nó');
+    expect(
+      workspaceAgentNodes(AgentGraphStore(), 'ws', tabs).map((s) => s.id),
+      ['t1', 't3'],
+      reason: 'shell puro não vira nó',
+    );
 
     final graph = AgentGraphStore()..addLink('ws', 't3', 't1');
     final peers = agentPeers(graph, claude.tab, tabs);

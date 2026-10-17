@@ -188,6 +188,7 @@ class Translations$cockpit$en {
 	late final Translations$cockpit$telemetry$en telemetry = Translations$cockpit$telemetry$en.internal(_root);
 	late final Translations$cockpit$panelView$en panelView = Translations$cockpit$panelView$en.internal(_root);
 	late final Translations$cockpit$agentGraph$en agentGraph = Translations$cockpit$agentGraph$en.internal(_root);
+	late final Translations$cockpit$desktopIntegration$en desktopIntegration = Translations$cockpit$desktopIntegration$en.internal(_root);
 }
 
 // Path: settings
@@ -2922,6 +2923,83 @@ class Translations$cockpit$agentGraph$en {
 
 	/// en: 'Close tab'
 	String get closeTab => 'Close tab';
+
+	/// en: 'Remove from canvas'
+	String get removeFromCanvas => 'Remove from canvas';
+
+	/// en: 'Desktop apps'
+	String get desktopApps => 'Desktop apps';
+
+	/// en: 'desktop'
+	String get desktopBadge => 'desktop';
+
+	/// en: 'Online'
+	String get statusOnline => 'Online';
+
+	/// en: 'Offline'
+	String get statusOffline => 'Offline';
+
+	/// en: '${n} queued'
+	String queued({required Object n}) => '${n} queued';
+
+	/// en: 'Name'
+	String get agentName => 'Name';
+
+	/// en: 'Integration'
+	String get integration => 'Integration';
+
+	/// en: 'Cockpit adds an MCP server named "cockpit" to this file and saves a backup next to it. Other servers are not touched.'
+	String get integrationHint => 'Cockpit adds an MCP server named "cockpit" to this file and saves a backup next to it. Other servers are not touched.';
+
+	/// en: 'Add the Cockpit MCP server to ${app}'s config'
+	String integrationConsent({required Object app}) => 'Add the Cockpit MCP server to ${app}\'s config';
+
+	/// en: 'Restart ${app} if it was already open so it loads the Cockpit MCP server; then ask it to call wait_messages.'
+	String restartHint({required Object app}) => 'Restart ${app} if it was already open so it loads the Cockpit MCP server; then ask it to call wait_messages.';
+
+	late final Translations$cockpit$agentGraph$integrationError$en integrationError = Translations$cockpit$agentGraph$integrationError$en.internal(_root);
+}
+
+// Path: cockpit.desktopIntegration
+class Translations$cockpit$desktopIntegration$en {
+	Translations$cockpit$desktopIntegration$en.internal(this._root);
+
+	final Translations _root; // ignore: unused_field
+
+	// Translations
+
+	/// en: 'Desktop app integrations (MCP)'
+	String get section => 'Desktop app integrations (MCP)';
+
+	/// en: 'No supported desktop app detected.'
+	String get none => 'No supported desktop app detected.';
+
+	/// en: 'Cockpit entry in ${path}'
+	String configured({required Object path}) => 'Cockpit entry in ${path}';
+
+	/// en: 'No Cockpit entry in ${path}'
+	String missing({required Object path}) => 'No Cockpit entry in ${path}';
+
+	/// en: 'Remove the Cockpit integration from ${app}?'
+	String removeTitle({required Object app}) => 'Remove the Cockpit integration from ${app}?';
+
+	/// en: 'Cockpit removes only its own "cockpit" entry from ${path} and keeps a backup next to it. Everything else in the file stays as is.'
+	String removeMessage({required Object path}) => 'Cockpit removes only its own "cockpit" entry from ${path} and keeps a backup next to it. Everything else in the file stays as is.';
+
+	/// en: 'Codex in Cockpit terminals uses this same entry: they will stop reaching other agents, and Cockpit will no longer add it back at startup. You can add it again in Settings → Automations.'
+	String get codexNote => 'Codex in Cockpit terminals uses this same entry: they will stop reaching other agents, and Cockpit will no longer add it back at startup. You can add it again in Settings → Automations.';
+
+	/// en: 'Cockpit integration removed from ${app}. A backup of the config was kept next to it.'
+	String removed({required Object app}) => 'Cockpit integration removed from ${app}. A backup of the config was kept next to it.';
+
+	/// en: 'Cockpit integration added to ${app}. Restart it if it is open.'
+	String added({required Object app}) => 'Cockpit integration added to ${app}. Restart it if it is open.';
+
+	/// en: 'Remove ${name} from the canvas?'
+	String removeNodeTitle({required Object name}) => 'Remove ${name} from the canvas?';
+
+	/// en: 'Also remove the Cockpit integration from ${app}'s config'
+	String removeNodeAlso({required Object app}) => 'Also remove the Cockpit integration from ${app}\'s config';
 }
 
 // Path: settings.language
@@ -3464,6 +3542,24 @@ class Translations$cockpit$notebook$format$en {
 
 	/// en: 'Insert image…'
 	String get image => 'Insert image…';
+}
+
+// Path: cockpit.agentGraph.integrationError
+class Translations$cockpit$agentGraph$integrationError$en {
+	Translations$cockpit$agentGraph$integrationError$en.internal(this._root);
+
+	final Translations _root; // ignore: unused_field
+
+	// Translations
+
+	/// en: '${path} is not plain JSON/TOML that Cockpit can edit safely (comments or a different layout). Nothing was changed.'
+	String invalidConfig({required Object path}) => '${path} is not plain JSON/TOML that Cockpit can edit safely (comments or a different layout). Nothing was changed.';
+
+	/// en: 'The Cockpit CLI is not installed yet (${path}). Restart Cockpit and try again.'
+	String cliMissing({required Object path}) => 'The Cockpit CLI is not installed yet (${path}). Restart Cockpit and try again.';
+
+	/// en: 'Could not update the config: ${detail}'
+	String writeFailed({required Object detail}) => 'Could not update the config: ${detail}';
 }
 
 // Path: settings.page.header
@@ -4947,6 +5043,31 @@ extension on Translations {
 			'cockpit.agentGraph.makeMaestro' => 'Make maestro',
 			'cockpit.agentGraph.removeMaestro' => 'Remove maestro',
 			'cockpit.agentGraph.closeTab' => 'Close tab',
+			'cockpit.agentGraph.removeFromCanvas' => 'Remove from canvas',
+			'cockpit.agentGraph.desktopApps' => 'Desktop apps',
+			'cockpit.agentGraph.desktopBadge' => 'desktop',
+			'cockpit.agentGraph.statusOnline' => 'Online',
+			'cockpit.agentGraph.statusOffline' => 'Offline',
+			'cockpit.agentGraph.queued' => ({required Object n}) => '${n} queued',
+			'cockpit.agentGraph.agentName' => 'Name',
+			'cockpit.agentGraph.integration' => 'Integration',
+			'cockpit.agentGraph.integrationHint' => 'Cockpit adds an MCP server named "cockpit" to this file and saves a backup next to it. Other servers are not touched.',
+			'cockpit.agentGraph.integrationConsent' => ({required Object app}) => 'Add the Cockpit MCP server to ${app}\'s config',
+			'cockpit.agentGraph.restartHint' => ({required Object app}) => 'Restart ${app} if it was already open so it loads the Cockpit MCP server; then ask it to call wait_messages.',
+			'cockpit.agentGraph.integrationError.invalidConfig' => ({required Object path}) => '${path} is not plain JSON/TOML that Cockpit can edit safely (comments or a different layout). Nothing was changed.',
+			'cockpit.agentGraph.integrationError.cliMissing' => ({required Object path}) => 'The Cockpit CLI is not installed yet (${path}). Restart Cockpit and try again.',
+			'cockpit.agentGraph.integrationError.writeFailed' => ({required Object detail}) => 'Could not update the config: ${detail}',
+			'cockpit.desktopIntegration.section' => 'Desktop app integrations (MCP)',
+			'cockpit.desktopIntegration.none' => 'No supported desktop app detected.',
+			'cockpit.desktopIntegration.configured' => ({required Object path}) => 'Cockpit entry in ${path}',
+			'cockpit.desktopIntegration.missing' => ({required Object path}) => 'No Cockpit entry in ${path}',
+			'cockpit.desktopIntegration.removeTitle' => ({required Object app}) => 'Remove the Cockpit integration from ${app}?',
+			'cockpit.desktopIntegration.removeMessage' => ({required Object path}) => 'Cockpit removes only its own "cockpit" entry from ${path} and keeps a backup next to it. Everything else in the file stays as is.',
+			'cockpit.desktopIntegration.codexNote' => 'Codex in Cockpit terminals uses this same entry: they will stop reaching other agents, and Cockpit will no longer add it back at startup. You can add it again in Settings → Automations.',
+			'cockpit.desktopIntegration.removed' => ({required Object app}) => 'Cockpit integration removed from ${app}. A backup of the config was kept next to it.',
+			'cockpit.desktopIntegration.added' => ({required Object app}) => 'Cockpit integration added to ${app}. Restart it if it is open.',
+			'cockpit.desktopIntegration.removeNodeTitle' => ({required Object name}) => 'Remove ${name} from the canvas?',
+			'cockpit.desktopIntegration.removeNodeAlso' => ({required Object app}) => 'Also remove the Cockpit integration from ${app}\'s config',
 			'settings.language.title' => 'Language',
 			'settings.language.system' => 'System',
 			'settings.language.english' => 'English',
@@ -5122,6 +5243,8 @@ extension on Translations {
 			'settings.page.automations.modelUnavailable' => 'The model list is unavailable until the harness is found.',
 			'settings.page.automations.modelCliOnly' => 'This harness uses its CLI default model.',
 			'settings.page.automations.modelCliDefault' => 'CLI default',
+			_ => null,
+		} ?? switch (path) {
 			'settings.page.automations.modelAuto' => 'Auto',
 			'settings.page.automations.modelSearch' => ({required Object count}) => 'Search among ${count} models…',
 			'settings.page.automations.modelAutoRouted' => 'This harness routes the model automatically.',
@@ -5147,8 +5270,6 @@ extension on Translations {
 			'settings.remoteHosts.deviceKeyCopied' => 'Public key copied',
 			'settings.remoteHosts.statusConnected' => 'Connected',
 			'settings.remoteHosts.statusConnecting' => 'Connecting…',
-			_ => null,
-		} ?? switch (path) {
 			'settings.remoteHosts.statusReconnecting' => 'Reconnecting…',
 			'settings.remoteHosts.statusOffline' => 'Offline',
 			'settings.remoteHosts.statusIdle' => 'Not connected',

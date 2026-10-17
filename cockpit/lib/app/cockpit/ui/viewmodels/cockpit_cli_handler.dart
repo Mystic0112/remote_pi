@@ -32,6 +32,7 @@ import 'package:cockpit/app/core/utils/shell_command.dart';
 import 'package:cockpit/app/cockpit/ui/document/document_windows.dart';
 import 'package:cockpit/app/cockpit/ui/session/agent_graph_session.dart';
 import 'package:cockpit/app/cockpit/ui/session/empty_tab.dart';
+import 'package:cockpit/app/cockpit/ui/session/external_agent.dart';
 import 'package:cockpit/app/cockpit/ui/session/browser_session.dart';
 import 'package:cockpit/app/cockpit/ui/session/notebook_session.dart';
 import 'package:cockpit/app/cockpit/ui/session/file_viewer_session.dart';
@@ -47,6 +48,7 @@ import 'package:cockpit/app/cockpit/ui/session/terminal_session.dart';
 import 'package:cockpit/app/cockpit/ui/states/pane_node.dart' show SplitDir;
 import 'package:cockpit/app/cockpit/ui/viewmodels/agent_graph_store.dart';
 import 'package:cockpit/app/cockpit/ui/viewmodels/agent_message_delivery.dart';
+import 'package:cockpit/app/cockpit/ui/viewmodels/agent_message_log.dart';
 import 'package:cockpit/app/cockpit/ui/viewmodels/cockpit_viewmodel.dart';
 import 'package:cockpit/app/cockpit/ui/viewmodels/telemetry_cli_handler.dart';
 
@@ -137,11 +139,18 @@ class CockpitCliHandler {
     // aba está em foco é a VM, não a CLI. Resolver aqui (e não em cada case)
     // vale pra todo comando que mira aba. Ferramenta externa (ditado por voz,
     // por exemplo) não tem como saber o id, e copiá-lo a cada uso é inviável.
-    final c = _resolveFocusSentinel(rawCommand);
-    if (c == null) {
+    final focused = _resolveFocusSentinel(rawCommand);
+    if (focused == null) {
       return const CockpitCommandResult.fail(
         'no focused tab (is a workspace open?)',
       );
+    }
+    final CockpitCommand c;
+    switch (actAsMcpFrom(focused, _vm.allSessions)) {
+      case Success(:final value):
+        c = value;
+      case Failure(:final error):
+        return CockpitCommandResult.fail(error);
     }
     // Telemetria (plano 66): verbos `telemetry-*` têm handler próprio; o
     // workspace é o da aba emissora (ou `--workspace`), como no `db`.
@@ -220,13 +229,74 @@ class CockpitCliHandler {
       case 'msg':
         return _sendAgentMessage(c);
 
-      // `cockpit peers` — links definidos no grafo de agentes da aba emissora.
-      case 'peers':
-        final caller = c.tabId == null ? null : _vm.session(c.tabId!);
-        if (caller == null) return _unknownCaller();
+      // `cockpit peers` — links definidos no grafo de agentes da aba emissora
+      // (ou do nó externo `ext:<app>`, pelo `peers` do MCP).
+      // `agents` — todo agente do workspace (o `list_agents` do MCP).
+      case 'peers' || 'agents':
+        final caller = _agentCaller(c.tabId);
+        if (caller == null) return _unknownCaller(c.tabId);
         return CockpitCommandResult.ok(
-          agentPeers(_vm.agentGraph, caller, _vm.allSessions),
+          (c.cmd == 'peers' ? agentPeers : workspaceAgentList)(
+            _vm.agentGraph,
+            caller,
+            _vm.allSessions,
+          ),
         );
+
+      // Servidor MCP de app desktop (`cockpit mcp`): batimento de presença e
+      // long-poll da fila do nó externo `tabId` = `ext:<app>`.
+      case 'ext-ping':
+        final e = _vm.agentGraph.externalById(c.tabId ?? '');
+        if (e == null) return _unknownCaller(c.tabId);
+        e.heartbeat();
+        return const CockpitCommandResult.ok();
+      // `wait_messages` do MCP: fila do nó externo, ou — `cockpit mcp` agindo
+      // como aba (Codex) — o log de mensagens pra aba desde a última chamada.
+      // Teto de 55s: o cliente MCP do Claude Desktop corta a requisição em ~60s.
+      case 'ext-wait':
+        final secs = ((c.args['timeout'] as num?)?.toInt() ?? 45).clamp(0, 55);
+        final e = _vm.agentGraph.externalById(c.tabId ?? '');
+        if (e == null) return _waitAsTab(c.tabId, Duration(seconds: secs));
+        e.markActive();
+        final msgs = await e.waitMessages(Duration(seconds: secs));
+        return CockpitCommandResult.ok([
+          for (final m in msgs)
+            {
+              'from': m.from,
+              'text': m.text,
+              'sentAt': m.sentAt.toIso8601String(),
+            },
+        ]);
+
+      // `cockpit mcp` pergunta quem é: a aba cuja árvore de processos contém
+      // ele (`pids` = ele e os ancestrais; o Codex da aba o spawnou). `tabId` =
+      // o `COCKPIT_TAB_ID` que ele herdou, se herdou (só vale onde a árvore não
+      // é visível). Falha = não está sob aba nenhuma: o servidor vira o nó
+      // externo do `--agent`.
+      case 'mcp-whoami':
+        final hint = c.tabId;
+        final pids = c.args['pids'];
+        final id = await _vm.tabOwningProcess(
+          [
+            if (pids is List)
+              for (final p in pids)
+                if (p is num) p.toInt(),
+          ],
+          hint: hint != null && _vm.session(hint) is TerminalSession
+              ? hint
+              : null,
+        );
+        final tab = id == null ? null : _vm.session(id);
+        if (tab is! TerminalSession) {
+          return const CockpitCommandResult.fail(
+            'not inside a Cockpit terminal',
+          );
+        }
+        _vm.agentMessages.markRead(tab.id);
+        return CockpitCommandResult.ok({
+          'tabId': tab.id,
+          'label': tab.displayTitle,
+        });
 
       // `cockpit open <path>` — abre um arquivo no viewer. A CLI já resolveu
       // pro caminho absoluto (o cwd do pane ≠ cwd do app). Abre no workspace do
@@ -1547,20 +1617,57 @@ class CockpitCliHandler {
   Result<PaneItem, String> _resolvePaneTarget(String target) =>
       resolveTabTarget(target, _vm.allSessions);
 
-  CockpitCommandResult _unknownCaller() => const CockpitCommandResult.fail(
-    'unknown tab (run inside a Cockpit terminal)',
+  /// Emissor de um verbo de agente: aba, ou nó externo (`ext:<app>`, o
+  /// servidor MCP) — que conta como atividade (status "working" do nó).
+  PaneItem? _agentCaller(String? id) {
+    if (id == null) return null;
+    final ext = _vm.agentGraph.externalById(id);
+    ext?.markActive();
+    return ext ?? _vm.session(id);
+  }
+
+  /// `wait_messages` de uma aba de terminal (ver [AgentMessageLog.takeFor]).
+  Future<CockpitCommandResult> _waitAsTab(String? id, Duration timeout) async {
+    final tab = id == null ? null : _vm.session(id);
+    if (tab is! TerminalSession) return _unknownCaller(id);
+    final msgs = await _vm.agentMessages.takeFor(
+      tab.id,
+      tab.projectId,
+      timeout,
+    );
+    return CockpitCommandResult.ok([
+      for (final m in msgs)
+        {
+          'from': m.signedBy ?? m.fromTabId,
+          'text': m.preview.length < AgentMessageLog.previewLength
+              ? m.preview
+              : '${m.preview}… (truncated: the full text was typed into '
+                    'your terminal)',
+          'sentAt': m.sentAt.toIso8601String(),
+        },
+    ]);
+  }
+
+  CockpitCommandResult _unknownCaller(String? id) => CockpitCommandResult.fail(
+    id != null && id.startsWith('ext:')
+        ? '${id.substring(4)} is not on a Cockpit agents canvas: in Cockpit '
+              'open Visualize agents → New agent → Desktop apps and add it'
+        : 'unknown tab (run inside a Cockpit terminal)',
   );
 
   CockpitCommandResult _sendAgentMessage(CockpitCommand c) {
-    final sender = c.tabId == null ? null : _vm.session(c.tabId!);
-    if (sender == null) return _unknownCaller();
+    final sender = _agentCaller(c.tabId);
+    if (sender == null) return _unknownCaller(c.tabId);
     final to = (c.args['to'] ?? '').toString();
     final text = (c.args['text'] ?? '').toString();
     if (to.isEmpty) return const CockpitCommandResult.fail('missing --to');
     if (text.isEmpty) return const CockpitCommandResult.fail('missing text');
-    final TerminalSession target;
-    switch (resolveTabTarget(to, _vm.allSessions)) {
+    final reachable = [..._vm.allSessions, ..._vm.agentGraph.externals];
+    final PaneItem target;
+    switch (resolveTabTarget(to, reachable)) {
       case Success(:final value) when value is TerminalSession:
+        target = value;
+      case Success(:final value) when value is ExternalAgent:
         target = value;
       case Success(:final value):
         return CockpitCommandResult.fail('tab "${value.id}" is not a terminal');
@@ -1747,4 +1854,49 @@ Result<PaneItem, String> resolveTabTarget(
     );
   }
   return Failure('no tab with id or label "$target" (see `cockpit list-tabs`)');
+}
+
+/// `from` das ferramentas do `cockpit mcp` (verbos `msg`/`peers`/`agents`/
+/// `ext-wait`): o Codex CLI roda as sessões num app-server daemon
+/// compartilhado que spawna o MCP fora da árvore da aba (sem pid nem env pra
+/// achá-la), e um processo serve várias abas — então a aba se identifica a
+/// cada chamada. Presente: só vale aba de terminal com Codex
+/// ([AgentChannel.mcpTab]) **e** com o `from_token` atual dela
+/// ([TerminalSession.acceptsMcpFromToken]; o Cockpit o digita só naquela aba,
+/// na apresentação do grafo), e o comando passa a ter o `tabId` dela (o cursor
+/// do `wait_messages` já é por aba no [AgentMessageLog]). `from` igual à
+/// identidade do startup (pid/env, já resolvida pelo app) dispensa o token.
+/// Ausente: o comando como veio.
+// ponytail: risco residual = processo local que leia o terminal da aba (ex.:
+// `cockpit read-tab`) aprende o token; fora de escopo num app de usuário
+// único (o socket é 0600 e esse processo já falaria direto com ele).
+Result<CockpitCommand, String> actAsMcpFrom(
+  CockpitCommand c,
+  Iterable<PaneItem> sessions,
+) {
+  final from = c.args['from'];
+  if (!const {'msg', 'peers', 'agents', 'ext-wait'}.contains(c.cmd) ||
+      from is! String ||
+      from.trim().isEmpty) {
+    return Success(c);
+  }
+  final token = c.args['from_token'];
+  return switch (resolveTabTarget(from.trim(), sessions)) {
+    Failure(:final error) => Failure('from: $error'),
+    Success(:final value) when agentChannel(value) != AgentChannel.mcpTab =>
+      Failure(
+        'from: tab "${value.id}" is not a Codex terminal tab (pass from only '
+        'when you are Codex running in a Cockpit terminal; omit it otherwise)',
+      ),
+    Success(:final value)
+        when value.id == c.tabId ||
+            (value is TerminalSession &&
+                value.acceptsMcpFromToken(token is String ? token : null)) =>
+      Success(CockpitCommand(cmd: c.cmd, tabId: value.id, args: c.args)),
+    Success(:final value) => Failure(
+      'from: missing or invalid from_token for tab "${value.id}" (pass the '
+      'from and from_token of the latest connection message Cockpit typed '
+      'into your terminal)',
+    ),
+  };
 }

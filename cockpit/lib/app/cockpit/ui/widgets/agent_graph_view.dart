@@ -2,7 +2,9 @@ import 'dart:async' show unawaited;
 
 import 'package:cockpit/app/cockpit/domain/entities/agent_message.dart';
 import 'package:cockpit/app/cockpit/ui/actions/agent_graph_actions.dart';
+import 'package:cockpit/app/cockpit/ui/actions/desktop_integration_actions.dart';
 import 'package:cockpit/app/cockpit/ui/session/agent_graph_session.dart';
+import 'package:cockpit/app/cockpit/ui/session/external_agent.dart';
 import 'package:cockpit/app/cockpit/ui/session/pane_item.dart';
 import 'package:cockpit/app/cockpit/ui/session/terminal_session.dart';
 import 'package:cockpit/app/cockpit/ui/viewmodels/agent_graph_store.dart';
@@ -12,7 +14,9 @@ import 'package:cockpit/app/cockpit/ui/widgets/agent_graph_parts.dart';
 import 'package:cockpit/app/cockpit/ui/widgets/agent_node_card.dart';
 import 'package:cockpit/app/cockpit/ui/widgets/new_agent_dialog.dart';
 import 'package:cockpit/app/core/domain/entities/harness.dart';
+import 'package:cockpit/app/core/domain/result.dart';
 import 'package:cockpit/app/core/ui/automation_controller.dart';
+import 'package:cockpit/app/core/ui/settings_controller.dart';
 import 'package:cockpit/app/core/ui/themes/themes.dart';
 import 'package:cockpit/app/core/ui/widgets/app_menu.dart';
 import 'package:cockpit/i18n/strings.g.dart';
@@ -106,25 +110,51 @@ class _AgentGraphViewState extends State<AgentGraphView>
     final automation = context.read<AutomationController>();
     await automation.ensureInitialized();
     if (!mounted) return;
-    final maestro = _vm.session(_graph.maestroOf(_ws) ?? '');
+    final onCanvas = {for (final e in _graph.externalsOf(_ws)) e.app};
+    final desktop = [
+      for (final i in await _vm.desktopApps.detect())
+        if (!onCanvas.contains(i.app)) i,
+    ];
+    if (!mounted) return;
+    final maestro = agentById(_vm, _graph.maestroOf(_ws) ?? '');
+    final remote = _vm.projectById(_ws)?.isRemoteTerminal ?? false;
     final draft = await showNewAgentDialog(
       context,
       harnesses: [
         for (final h in automation.harnesses) ?HarnessCatalog.getSpec(h.id),
       ],
-      taken: takenLabels(_vm.allSessions),
+      desktopApps: desktop,
+      taken: takenLabels(addressableAgents(_vm)),
       root: _vm.projectRootOf(_ws) ?? '',
-      remote: _vm.projectById(_ws)?.isRemoteTerminal ?? false,
+      remote: remote,
       currentMaestro: maestro?.displayTitle,
     );
     if (draft == null || !mounted) return;
-    createAgent(
+    final scene = at == null ? null : _inScene(at);
+    final integration = draft.desktop;
+    if (integration == null) {
+      createAgent(_vm, _ws, widget.session.id, draft, at: scene);
+      return;
+    }
+    final installed = await addDesktopIntegration(
+      _vm.desktopApps,
+      context.read<SettingsController>(),
+      integration,
+    );
+    if (!mounted) return;
+    final tr = context.t.cockpit.agentGraph;
+    if (installed case Failure(:final error)) {
+      return showGraphToast(context, desktopAppErrorMessage(context, error));
+    }
+    createExternalAgent(
       _vm,
       _ws,
-      widget.session.id,
-      draft,
-      at: at == null ? null : _inScene(at),
+      integration.app,
+      // A pasta é local: num workspace remoto a IDE abre sem pasta.
+      remote ? draft.withCwd('') : draft,
+      at: scene,
     );
+    showGraphToast(context, tr.restartHint(app: integration.app.label));
   }
 
   void _finishLink(Map<String, Offset> positions) {
@@ -133,7 +163,7 @@ class _AgentGraphViewState extends State<AgentGraphView>
     setState(() => _linkFrom = _linkStart = _linkEnd = null);
     if (from == null || end == null) return;
     for (final e in positions.entries) {
-      final to = _vm.session(e.key);
+      final to = agentById(_vm, e.key);
       if (to != null &&
           to.id != from.id &&
           (e.value & const Size(kAgentNodeWidth, kAgentNodeHeight)).contains(
@@ -278,7 +308,7 @@ class _AgentGraphViewState extends State<AgentGraphView>
                     Positioned(
                       left: at.dx,
                       top: at.dy,
-                      child: _card(s, at, shown),
+                      child: _node(s, at, shown),
                     ),
                 if ((hovered, _hover) case (final c?, final at?))
                   Positioned(
@@ -294,12 +324,18 @@ class _AgentGraphViewState extends State<AgentGraphView>
     );
   }
 
+  // Nó externo muda sozinho (online/working/fila): rebuild só dele.
+  Widget _node(PaneItem s, Offset at, Map<String, Offset> shown) =>
+      s is ExternalAgent
+      ? ListenableBuilder(listenable: s, builder: (_, _) => _card(s, at, shown))
+      : _card(s, at, shown);
+
   Widget _card(PaneItem s, Offset at, Map<String, Offset> shown) =>
       AgentNodeCard(
         session: s,
         color: _graph.colorOf(s.id),
         maestro: _graph.maestroOf(_ws) == s.id,
-        onTap: () => focusAgentTab(_vm, _ws, s.id),
+        onTap: () => focusAgent(_vm, _ws, s),
         onSecondaryTap: (global) =>
             showAgentNodeMenu(context, _vm, _ws, s, global),
         onDrag: (delta) => _graph.setPosition(_ws, s.id, _inScene(at + delta)),

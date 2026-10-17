@@ -17,6 +17,7 @@ mod commands;
 mod flags;
 mod hook;
 mod keys;
+mod mcp;
 mod skills;
 mod telemetry;
 mod transport;
@@ -56,6 +57,8 @@ fn main() {
         "send-key" | "send-keys" => commands::send_key(args),
         "msg" => commands::msg(args),
         "peers" => commands::list("peers", args),
+        // Servidor MCP (stdio) de um app desktop no grafo de agentes.
+        "mcp" => mcp::run(args),
         "open" => commands::open(args),
         // Mantém o comando de wire 'list-panes' (protocolo estável); só o nome
         // do verbo mudou na superfície.

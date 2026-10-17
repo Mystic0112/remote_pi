@@ -1,6 +1,9 @@
-import 'dart:async' show Timer;
+import 'dart:async' show Timer, unawaited;
 
+import 'package:cockpit/app/cockpit/domain/entities/desktop_agent_app.dart';
+import 'package:cockpit/app/cockpit/ui/actions/desktop_integration_actions.dart';
 import 'package:cockpit/app/cockpit/ui/actions/tab_actions.dart';
+import 'package:cockpit/app/cockpit/ui/session/external_agent.dart';
 import 'package:cockpit/app/cockpit/ui/session/pane_item.dart';
 import 'package:cockpit/app/cockpit/ui/session/terminal_session.dart';
 import 'package:cockpit/app/cockpit/ui/states/pane_node.dart';
@@ -56,14 +59,26 @@ String? launchAgentBeside(
   return res is Success<String, String> ? res.value : null;
 }
 
-/// Agentes do workspace — os nós do canvas: abas com harness detectado.
+/// Agentes do workspace — os nós do canvas: abas com harness detectado e os
+/// nós externos (apps desktop).
 List<PaneItem> workspaceAgents(CockpitViewModel vm, String ws) =>
-    workspaceAgentNodes(ws, vm.allSessions);
+    workspaceAgentNodes(vm.agentGraph, ws, vm.allSessions);
 
-bool _alive(CockpitViewModel vm, PaneItem s) => identical(vm.session(s.id), s);
+/// Tudo que um `--to`/label alcança: abas e nós externos.
+List<PaneItem> addressableAgents(CockpitViewModel vm) => [
+  ...vm.allSessions,
+  ...vm.agentGraph.externals,
+];
+
+/// Nó do grafo por id: aba ou nó externo.
+PaneItem? agentById(CockpitViewModel vm, String id) =>
+    vm.session(id) ?? vm.agentGraph.externalById(id);
+
+bool _alive(CockpitViewModel vm, PaneItem s) =>
+    identical(agentById(vm, s.id), s);
 
 List<PaneItem> _peers(CockpitViewModel vm, String ws, PaneItem s) => [
-  ...vm.agentGraph.peersOf(ws, s.id).map(vm.session).nonNulls,
+  ...vm.agentGraph.peersOf(ws, s.id).map((id) => agentById(vm, id)).nonNulls,
 ];
 
 /// Folga entre o harness ser detectado e a primeira mensagem: a TUI ainda
@@ -112,6 +127,28 @@ String? createAgent(
   return s.id;
 }
 
+/// Desktop app do dialog: nó externo no canvas (com cor/maestro/links), o app
+/// aberto e role/tarefa/apresentações já na fila dele (o app as lê com
+/// `wait_messages` quando carregar o MCP). A integração (config MCP) roda
+/// antes, em quem chama.
+ExternalAgent createExternalAgent(
+  CockpitViewModel vm,
+  String ws,
+  DesktopAgentApp app,
+  NewAgentDraft d, {
+  Offset? at,
+}) {
+  final e = vm.agentGraph.addExternal(
+    ws,
+    app,
+    label: d.label.isEmpty ? app.label : d.label,
+    workingDirectory: d.cwd,
+  );
+  _greet(vm, ws, e, d, _attach(vm, ws, e, d, at: at));
+  unawaited(vm.desktopApps.launch(app, d.cwd));
+  return e;
+}
+
 /// Posição, cor e links do nó novo [s] (maestro liga a todos; os outros, ao
 /// maestro atual). Devolve os ligados agora.
 List<PaneItem> _attach(
@@ -130,9 +167,9 @@ List<PaneItem> _attach(
       s.id,
       workspaceAgents(vm, ws).map((a) => a.id),
     );
-    return [...ids.map(vm.session).nonNulls];
+    return [...ids.map((id) => agentById(vm, id)).nonNulls];
   }
-  final maestro = vm.session(g.maestroOf(ws) ?? '');
+  final maestro = agentById(vm, g.maestroOf(ws) ?? '');
   return [
     if (maestro != null &&
         maestro.id != s.id &&
@@ -150,6 +187,9 @@ void _greet(
   NewAgentDraft d,
   List<PaneItem> linked,
 ) {
+  final via = agentChannel(s);
+  // Um token pro lote todo: várias apresentações seguidas não se invalidam.
+  final token = mcpFromTokenFor(s);
   deliverQueued(
     log: vm.agentMessages,
     target: s,
@@ -158,9 +198,18 @@ void _greet(
       if (d.role.isNotEmpty) (s, d.role),
       if (d.task.isNotEmpty) (s, d.task),
       if (d.maestro)
-        (s, maestroIntroText(_peers(vm, ws, s)))
+        (
+          s,
+          maestroIntroText(
+            _peers(vm, ws, s),
+            via: via,
+            selfId: s.id,
+            token: token,
+          ),
+        )
       else
-        for (final p in linked) (p, linkIntroText(p)),
+        for (final p in linked)
+          (p, linkIntroText(p, via: via, selfId: s.id, token: token)),
     ],
   );
   for (final p in linked) {
@@ -174,7 +223,17 @@ void _introduce(CockpitViewModel vm, PaneItem self, PaneItem peer) =>
       log: vm.agentMessages,
       target: self,
       targetAlive: () => _alive(vm, self),
-      items: [(peer, linkIntroText(peer))],
+      items: [
+        (
+          peer,
+          linkIntroText(
+            peer,
+            via: agentChannel(self),
+            selfId: self.id,
+            token: mcpFromTokenFor(self),
+          ),
+        ),
+      ],
     );
 
 /// Promove [s] (agente já no canvas) a maestro: liga a todos, apresenta-o aos
@@ -186,34 +245,48 @@ void makeMaestro(CockpitViewModel vm, String ws, PaneItem s) {
     s.id,
     workspaceAgents(vm, ws).map((a) => a.id),
   );
-  for (final p in added.map(vm.session).nonNulls) {
+  for (final p in added.map((id) => agentById(vm, id)).nonNulls) {
     _introduce(vm, p, s);
   }
   deliverQueued(
     log: vm.agentMessages,
     target: s,
     targetAlive: () => _alive(vm, s),
-    items: [(s, maestroIntroText(_peers(vm, ws, s)))],
+    items: [
+      (
+        s,
+        maestroIntroText(
+          _peers(vm, ws, s),
+          via: agentChannel(s),
+          selfId: s.id,
+          token: mcpFromTokenFor(s),
+        ),
+      ),
+    ],
   );
 }
 
 /// Nós que o canvas acabou de ver ([ids]) se ligam ao maestro atual.
 void linkToMaestro(CockpitViewModel vm, String ws, Iterable<String> ids) {
-  final m = vm.session(vm.agentGraph.maestroOf(ws) ?? '');
+  final m = agentById(vm, vm.agentGraph.maestroOf(ws) ?? '');
   if (m == null) return;
   final fresh = [
-    for (final s in ids.map(vm.session).nonNulls)
+    for (final s in ids.map((id) => agentById(vm, id)).nonNulls)
       if (s.id != m.id && vm.agentGraph.addLink(ws, s.id, m.id)) s,
   ];
   if (fresh.isEmpty) return;
   for (final s in fresh) {
     _introduce(vm, s, m);
   }
+  final token = mcpFromTokenFor(m);
   deliverQueued(
     log: vm.agentMessages,
     target: m,
     targetAlive: () => _alive(vm, m),
-    items: [for (final s in fresh) (s, linkIntroText(s))],
+    items: [
+      for (final s in fresh)
+        (s, linkIntroText(s, via: agentChannel(m), selfId: m.id, token: token)),
+    ],
   );
 }
 
@@ -240,7 +313,14 @@ void focusAgentTab(CockpitViewModel vm, String workspaceId, String tabId) {
   if (leaf != null) vm.selectTab(leaf, tabId);
 }
 
-/// Clique direito num nó: focar, renomear, maestro, fechar a aba.
+/// Clique no nó: foca a aba; nó externo abre/traz o app pra frente.
+void focusAgent(CockpitViewModel vm, String ws, PaneItem s) =>
+    s is ExternalAgent
+    ? unawaited(vm.desktopApps.launch(s.app, s.workingDirectory))
+    : focusAgentTab(vm, ws, s.id);
+
+/// Clique direito num nó: focar, renomear, maestro, fechar a aba (nó externo:
+/// tirar do canvas).
 Future<void> showAgentNodeMenu(
   BuildContext context,
   CockpitViewModel vm,
@@ -264,7 +344,7 @@ Future<void> showAgentNodeMenu(
       const AppMenuItem.divider(),
       AppMenuItem(
         value: 'close',
-        label: tr.closeTab,
+        label: s is ExternalAgent ? tr.removeFromCanvas : tr.closeTab,
         icon: Icons.close,
         danger: true,
       ),
@@ -273,21 +353,25 @@ Future<void> showAgentNodeMenu(
   if (!context.mounted) return;
   switch (pick) {
     case 'focus':
-      focusAgentTab(vm, ws, s.id);
+      focusAgent(vm, ws, s);
     case 'rename':
       final name = await showRealmNameDialog(
         context,
         title: tr.renameTitle,
         confirmLabel: tr.rename,
-        takenNames: takenLabels(vm.allSessions, except: s.id),
+        takenNames: takenLabels(addressableAgents(vm), except: s.id),
         initial: s.manualLabel ?? s.displayTitle,
         placeholder: tr.name,
         duplicateMessage: tr.nameTaken,
       );
       if (name == null || !_alive(vm, s)) return;
-      vm.setPaneLabel(s.id, name);
+      s is ExternalAgent
+          ? vm.agentGraph.renameExternal(s.id, name)
+          : vm.setPaneLabel(s.id, name);
     case 'maestro':
       isMaestro ? vm.agentGraph.clearMaestro(ws) : makeMaestro(vm, ws, s);
+    case 'close' when s is ExternalAgent:
+      await removeExternalNode(context, vm, ws, s);
     case 'close':
       final leaf = vm.leafOfTab(ws, s.id);
       if (leaf != null) {

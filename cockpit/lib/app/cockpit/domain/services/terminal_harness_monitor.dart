@@ -272,6 +272,57 @@ class TerminalHarnessMonitor {
     }
   }
 
+  /// Aba cuja árvore de processos (raiz = shell do PTY) contém o processo de
+  /// [pids] (`[pid, ppid, …]`, como a CLI os leu): é como o `cockpit mcp` que
+  /// o Codex de uma aba spawnou descobre que é aquela aba (o sandbox do Codex
+  /// não deixa env nem socket chegarem à CLI de shell).
+  ///
+  /// A CLI manda a cadeia porque descer das raízes não acha o processo no
+  /// Linux: filho de uma thread que não a principal (o Codex é tokio) só
+  /// aparece no `task/<tid>/children` dela. Só o pid (Windows, sem `ps`) =
+  /// sobe pela tabela do [provider].
+  ///
+  /// [hint] (o `COCKPIT_TAB_ID` que o processo herdou) só vale quando a árvore
+  /// da aba não é visível daqui (WSL, host remoto): env herdado não prova
+  /// parentesco — um Cursor aberto de um terminal do Cockpit herda o env e não
+  /// é aquela aba.
+  Future<String?> sessionOwningProcess(List<int> pids, {String? hint}) async {
+    final roots = <int, String>{
+      for (final a in _anchors.values)
+        if (a.wslDistro == null) ?a.rootPid(): a.sessionId,
+    };
+    for (final pid in pids) {
+      if (roots[pid] case final owner?) return owner;
+    }
+    if (pids.length == 1 && roots.isNotEmpty) {
+      final snapshots = await provider.getProcessSnapshots(
+        rootPids: roots.keys.toList(),
+      );
+      final owner = ownerOfProcess(pids.single, roots, snapshots);
+      if (owner != null) return owner;
+    }
+    return hint != null && !roots.containsValue(hint) ? hint : null;
+  }
+
+  /// Sobe de [pid] pelos `ppid` de [snapshots] até cair numa raiz de [roots]
+  /// (pid da raiz → id da sessão).
+  static String? ownerOfProcess(
+    int pid,
+    Map<int, String> roots,
+    List<ProcessSnapshot> snapshots,
+  ) {
+    final parent = {for (final s in snapshots) s.pid: s.ppid};
+    int? p = pid;
+    // Teto de saltos: tabela com ciclo (pid reciclado no meio da leitura).
+    for (var hop = 0; p != null && hop < 64; hop++) {
+      final owner = roots[p];
+      if (owner != null) return owner;
+      final next = parent[p];
+      p = next == p ? null : next;
+    }
+    return null;
+  }
+
   ProcessTreeProvider _resolveWslProvider(String distro) {
     final cached = _wslProviderCache[distro];
     if (cached != null) return cached;

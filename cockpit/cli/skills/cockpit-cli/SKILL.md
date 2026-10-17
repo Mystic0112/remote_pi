@@ -115,6 +115,21 @@ command the line gives.
 If the intro says you are the **maestro**, you coordinate every agent on the
 canvas: delegate with `cockpit msg --to <label>` and check `cockpit peers`
 (`maestro: true` marks the maestro in the other agents' peers).
+A peer with `app` (`claude-desktop`, `cursor`…) is a desktop app joined via
+`cockpit mcp`: message it with `msg --to <label>` as usual; it reads the queue
+when it calls `wait_messages`, so its reply can take a while.
+
+**Codex: use the `cockpit` MCP tools.** Codex's sandbox strips the
+`COCKPIT_*` env and blocks the app socket, so `cockpit msg`/`peers` fail there
+(`could not connect to app: Operation not permitted`). Cockpit registers a
+`cockpit` MCP server in `~/.codex/config.toml` that runs outside the sandbox
+and acts as your tab: `send {to, text}` instead of `msg`, `peers`,
+`list_agents`, and `wait_messages` (messages to your tab since its last call;
+they are also typed into your terminal as `[from: …]` lines).
+Always pass `from: "<your tab id>"` and `from_token: "<token>"` (both from
+the latest Cockpit connection message in your terminal; a newer one replaces
+the token) to these tools: Codex spawns MCP servers outside your tab, so that
+is how they know who you are. `from` without the current token is rejected.
 
 Typical loop — dispatch work to a tab, wait, then read the result:
 

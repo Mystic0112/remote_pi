@@ -8,6 +8,11 @@ import 'package:cockpit/app/cockpit/data/remote/remote_host_connector.dart'
 import 'package:cockpit/app/cockpit/domain/entities/remote_host.dart';
 import 'package:cockpit/app/cockpit/ui/remote/add_remote_host_dialog.dart';
 import 'package:cockpit/app/cockpit/ui/remote/remote_hosts_controller.dart';
+import 'package:cockpit/app/cockpit/domain/contracts/desktop_agent_apps.dart';
+import 'package:cockpit/app/cockpit/domain/entities/desktop_agent_app.dart';
+import 'package:cockpit/app/cockpit/ui/actions/desktop_integration_actions.dart';
+import 'package:cockpit/app/cockpit/ui/widgets/agent_graph_parts.dart'
+    show desktopAppErrorMessage;
 import 'package:cockpit/app/cockpit/ui/widgets/confirm_dialog.dart';
 import 'package:cockpit/app/core/domain/contracts/terminal_profile_resolver.dart';
 import 'package:cockpit/app/core/domain/entities/setup_check.dart';
@@ -663,9 +668,111 @@ class _AutomationsPanelState extends State<_AutomationsPanel> {
                   automationErrorMessage(context, automation.error!),
                   style: context.typo.label.copyWith(color: colors.error),
                 ),
+              const SizedBox(height: 24),
+              const _DesktopIntegrationsSection(),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Integrações MCP com apps desktop (Agents graph): quem tem a entrada
+/// `cockpit` no config, e adicionar/remover só ela (com backup). Codex: a
+/// entrada é a mesma do Codex das abas; remover também desliga a reinstalação
+/// no boot (`AppSettings.codexMcpIntegration`).
+class _DesktopIntegrationsSection extends StatefulWidget {
+  const _DesktopIntegrationsSection();
+
+  @override
+  State<_DesktopIntegrationsSection> createState() =>
+      _DesktopIntegrationsSectionState();
+}
+
+class _DesktopIntegrationsSectionState
+    extends State<_DesktopIntegrationsSection> {
+  // Singleton do cockpit_module (rota base, já carregada), como os hosts.
+  final DesktopAgentApps _apps = inject<DesktopAgentApps>();
+  List<DesktopAppIntegration>? _items;
+  DesktopAppError? _error;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final items = await _apps.integrations();
+    if (mounted) setState(() => _items = items);
+  }
+
+  Future<void> _toggle(DesktopAppIntegration i) async {
+    final settings = context.read<SettingsController>();
+    if (i.configured && !await confirmRemoveDesktopIntegration(context, i)) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _busy = true);
+    final r = i.configured
+        ? await removeDesktopIntegration(_apps, settings, i)
+        : await addDesktopIntegration(_apps, settings, i);
+    await _load();
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _error = r.fold((_) => null, (e) => e);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tr = context.t.cockpit.desktopIntegration;
+    final items = _items;
+    final error = _error;
+    return _Section(
+      label: tr.section,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _Card(
+            children: [
+              if (items == null)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: CircularProgressIndicator(size: 14)),
+                )
+              else if (items.isEmpty)
+                _Row(title: tr.none)
+              else
+                for (final i in items)
+                  _Row(
+                    title: i.app.label,
+                    description: i.configured
+                        ? tr.configured(path: i.configPath)
+                        : tr.missing(path: i.configPath),
+                    trailing: OutlineButton(
+                      onPressed: _busy ? null : () => unawaited(_toggle(i)),
+                      child: Text(
+                        i.configured
+                            ? context.t.common.remove
+                            : context.t.common.add,
+                      ),
+                    ),
+                  ),
+            ],
+          ),
+          if (error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, left: 4),
+              child: Text(
+                desktopAppErrorMessage(context, error),
+                style: context.typo.label.copyWith(color: context.colors.error),
+              ),
+            ),
+        ],
       ),
     );
   }

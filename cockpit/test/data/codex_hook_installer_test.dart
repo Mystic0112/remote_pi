@@ -2,15 +2,22 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cockpit/app/cockpit/data/hooks/codex_hook_installer_impl.dart';
+import 'package:cockpit/app/cockpit/domain/services/mcp_config_merge.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Instalador com o passo de materialização da CLI curto-circuitado: os testes
 /// exercitam a escrita da config (que é o que tem regra), não a cópia de
 /// binário — que depende do bundle do app.
 class _FakeInstaller extends CodexHookInstallerImpl {
-  const _FakeInstaller(this.command);
+  const _FakeInstaller(this.command, {this.cli, super.installMcp});
 
   final String command;
+
+  /// CLI pra entrada MCP; `null` = sem CLI (entrada fica de fora).
+  final String? cli;
+
+  @override
+  Future<String?> mcpCommand() async => cli;
 
   @override
   Future<String?> ensureCli() async => '/fake/cockpit';
@@ -240,5 +247,113 @@ void main() {
       );
       expect((readHooks()['hooks'] as Map).keys, hasLength(7));
     });
+  });
+
+  group('entrada MCP (Codex nas abas e no app desktop)', () {
+    const cli = '/home/u/.cockpit/bin/cockpit';
+    const installer = _FakeInstaller('/bin/cockpit hook', cli: cli);
+    final entry = tomlMcpEntry(
+      command: cli,
+      args: ['mcp', '--agent', 'codex-desktop'],
+    );
+    Future<void> boot() =>
+        installer.writeConfig(home: home.path, command: '/bin/cockpit hook');
+
+    test('escreve uma vez, antes do bloco; reboot não muda um byte', () async {
+      final config = File('${codex.path}/config.toml')
+        ..writeAsStringSync('model = "gpt-5.6"\n');
+      await boot();
+      final once = config.readAsStringSync();
+      expect(once, startsWith('model = "gpt-5.6"\n\n$entry\n# >>> cockpit'));
+      expect(once, contains('env_vars = ["COCKPIT_TAB_ID"'));
+      final stamp = config.lastModifiedSync();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await boot();
+      await boot();
+      expect(config.readAsStringSync(), once);
+      expect(config.lastModifiedSync(), stamp, reason: 'nada mudou: não grava');
+      // Backup do original, uma vez só.
+      final bak = File('${config.path}.cockpit-bak');
+      expect(bak.readAsStringSync(), 'model = "gpt-5.6"\n');
+    });
+
+    test(
+      'entrada do dialog (depois do bloco) é reaproveitada, não duplicada',
+      () async {
+        await const _FakeInstaller(
+          '/bin/cockpit hook',
+        ).writeConfig(home: home.path, command: '/bin/cockpit hook');
+        final config = File('${codex.path}/config.toml');
+        // O dialog de apps desktop acrescenta no fim, depois do bloco de hooks.
+        config.writeAsStringSync(
+          mergeTomlMcpServer(
+            config.readAsStringSync(),
+            command: cli,
+            args: mcpServerArgs('codex-desktop'),
+          ),
+        );
+        await boot();
+        await boot();
+        final content = config.readAsStringSync();
+        expect('[mcp_servers.cockpit]'.allMatches(content).length, 1);
+        expect('# >>> cockpit hooks'.allMatches(content).length, 1);
+        expect('# <<< cockpit hooks'.allMatches(content).length, 1);
+        expect('trusted_hash'.allMatches(content).length, 7);
+      },
+    );
+
+    test(
+      'sem CLI materializada, ou cockpit definido à mão: não mexe',
+      () async {
+        await const _FakeInstaller(
+          '/bin/cockpit hook',
+        ).writeConfig(home: home.path, command: '/bin/cockpit hook');
+        expect(readConfig(), isNot(contains('mcp_servers')));
+
+        final config = File('${codex.path}/config.toml')
+          ..writeAsStringSync('mcp_servers.cockpit.command = "meu"\n');
+        await boot();
+        final content = config.readAsStringSync();
+        expect(content, startsWith('mcp_servers.cockpit.command = "meu"\n'));
+        expect(content, isNot(contains('[mcp_servers.cockpit]')));
+        expect(content, contains('trusted_hash'));
+      },
+    );
+
+    test(
+      'removida em Configurações (installMcp: false): o boot não recoloca',
+      () async {
+        final config = File('${codex.path}/config.toml')
+          ..writeAsStringSync('model = "gpt-5.6"\n');
+        await boot();
+        final withEntry = config.readAsStringSync();
+        // O que o "Remove" de Configurações faz: só a tabela sai.
+        config.writeAsStringSync(removeTomlMcpServer(withEntry));
+        final removed = config.readAsStringSync();
+        expect(removed, isNot(contains('mcp_servers')));
+        expect(removed, startsWith('model = "gpt-5.6"\n\n# >>> cockpit hooks'));
+        expect('trusted_hash'.allMatches(removed).length, 7);
+
+        const optedOut = _FakeInstaller(
+          '/bin/cockpit hook',
+          cli: cli,
+          installMcp: false,
+        );
+        await optedOut.writeConfig(
+          home: home.path,
+          command: '/bin/cockpit hook',
+        );
+        expect(
+          config.readAsStringSync(),
+          removed,
+          reason: 'hooks seguem; MCP não',
+        );
+        // Religar em Configurações volta a garantir a entrada.
+        await boot();
+        final back = config.readAsStringSync();
+        expect('[mcp_servers.cockpit]'.allMatches(back).length, 1);
+        expect(back, contains(entry));
+      },
+    );
   });
 }

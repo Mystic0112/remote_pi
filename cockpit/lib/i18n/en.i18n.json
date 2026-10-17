@@ -965,7 +965,36 @@
       "renameTitle": "Rename agent",
       "makeMaestro": "Make maestro",
       "removeMaestro": "Remove maestro",
-      "closeTab": "Close tab"
+      "closeTab": "Close tab",
+      "removeFromCanvas": "Remove from canvas",
+      "desktopApps": "Desktop apps",
+      "desktopBadge": "desktop",
+      "statusOnline": "Online",
+      "statusOffline": "Offline",
+      "queued": "${n} queued",
+      "agentName": "Name",
+      "integration": "Integration",
+      "integrationHint": "Cockpit adds an MCP server named \"cockpit\" to this file and saves a backup next to it. Other servers are not touched.",
+      "integrationConsent": "Add the Cockpit MCP server to ${app}'s config",
+      "restartHint": "Restart ${app} if it was already open so it loads the Cockpit MCP server; then ask it to call wait_messages.",
+      "integrationError": {
+        "invalidConfig": "${path} is not plain JSON/TOML that Cockpit can edit safely (comments or a different layout). Nothing was changed.",
+        "cliMissing": "The Cockpit CLI is not installed yet (${path}). Restart Cockpit and try again.",
+        "writeFailed": "Could not update the config: ${detail}"
+      }
+    },
+    "desktopIntegration": {
+      "section": "Desktop app integrations (MCP)",
+      "none": "No supported desktop app detected.",
+      "configured": "Cockpit entry in ${path}",
+      "missing": "No Cockpit entry in ${path}",
+      "removeTitle": "Remove the Cockpit integration from ${app}?",
+      "removeMessage": "Cockpit removes only its own \"cockpit\" entry from ${path} and keeps a backup next to it. Everything else in the file stays as is.",
+      "codexNote": "Codex in Cockpit terminals uses this same entry: they will stop reaching other agents, and Cockpit will no longer add it back at startup. You can add it again in Settings → Automations.",
+      "removed": "Cockpit integration removed from ${app}. A backup of the config was kept next to it.",
+      "added": "Cockpit integration added to ${app}. Restart it if it is open.",
+      "removeNodeTitle": "Remove ${name} from the canvas?",
+      "removeNodeAlso": "Also remove the Cockpit integration from ${app}'s config"
     }
   },
   "settings": {

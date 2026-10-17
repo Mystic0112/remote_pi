@@ -1,5 +1,6 @@
 import 'dart:io' show Directory;
 
+import 'package:cockpit/app/cockpit/domain/entities/desktop_agent_app.dart';
 import 'package:cockpit/app/cockpit/ui/actions/agent_graph_actions.dart';
 import 'package:cockpit/app/cockpit/ui/widgets/agent_node_card.dart';
 import 'package:cockpit/app/core/domain/entities/harness.dart';
@@ -9,6 +10,7 @@ import 'package:cockpit/app/core/ui/widgets/app_tooltip.dart';
 import 'package:cockpit/i18n/strings.g.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
+part 'new_agent_dialog_desktop.dart';
 part 'new_agent_dialog_parts.dart';
 
 /// O que o dialog "New agent" devolve. Campos vazios = "não definido".
@@ -22,6 +24,7 @@ class NewAgentDraft {
     this.color,
     this.role = '',
     this.task = '',
+    this.desktop,
   });
   final String label;
   final String command;
@@ -31,15 +34,33 @@ class NewAgentDraft {
   final Color? color;
   final String role;
   final String task;
+
+  /// App desktop escolhido (nó externo via MCP), com a integração aceita;
+  /// `null` = agente de terminal. [command]/[monitor] não se aplicam a ele.
+  final DesktopAppIntegration? desktop;
+
+  NewAgentDraft withCwd(String cwd) => NewAgentDraft(
+    label: label,
+    command: command,
+    cwd: cwd,
+    monitor: monitor,
+    maestro: maestro,
+    color: color,
+    role: role,
+    task: task,
+    desktop: desktop,
+  );
 }
 
 /// Sheet "New agent" (estilo "Novo terminal" do Maestri). [taken] = rótulos em
 /// uso (minúsculos); [remote] desliga Browse/validação local da pasta (ela mora
-/// no host). Dialogs vivem fora dos providers da rota: tudo chega por parâmetro.
+/// no host); [desktopApps] = apps desktop detectados (linha "Desktop apps").
+/// Dialogs vivem fora dos providers da rota: tudo chega por parâmetro.
 /// O Pi, alvo principal do projeto, vem primeiro no quick start.
 Future<NewAgentDraft?> showNewAgentDialog(
   BuildContext context, {
   required List<HarnessSpec> harnesses,
+  List<DesktopAppIntegration> desktopApps = const [],
   required Set<String> taken,
   required String root,
   required bool remote,
@@ -52,6 +73,7 @@ Future<NewAgentDraft?> showNewAgentDialog(
       ...harnesses.where((h) => h.kind == HarnessKind.pi),
       ...harnesses.where((h) => h.kind != HarnessKind.pi),
     ],
+    desktopApps: desktopApps,
     taken: taken,
     root: root,
     remote: remote,
@@ -62,12 +84,14 @@ Future<NewAgentDraft?> showNewAgentDialog(
 class _NewAgentDialog extends StatefulWidget {
   const _NewAgentDialog({
     required this.harnesses,
+    required this.desktopApps,
     required this.taken,
     required this.root,
     required this.remote,
     this.currentMaestro,
   });
   final List<HarnessSpec> harnesses;
+  final List<DesktopAppIntegration> desktopApps;
   final Set<String> taken;
   final String root;
   final bool remote;
@@ -87,6 +111,11 @@ class _NewAgentDialogState extends State<_NewAgentDialog> {
   bool _monitor = true;
   bool _maestro = false;
   Color? _color;
+
+  /// Modo desktop: app escolhido na linha "Desktop apps" + o aceite da
+  /// integração (obrigatório pra criar).
+  DesktopAppIntegration? _desktop;
+  bool _consent = false;
 
   /// Último nome posto pelo quick start: trocar de harness troca o nome
   /// enquanto o usuário não digitou o dele.
@@ -108,13 +137,25 @@ class _NewAgentDialogState extends State<_NewAgentDialog> {
   }
 
   void _quickStart(String command, String name) => setState(() {
+    _desktop = null;
     _command.text = command;
+    _autoNameAs(name);
+  });
+
+  void _pickDesktop(DesktopAppIntegration app) => setState(() {
+    if (_desktop?.app != app.app) _consent = false;
+    _desktop = app;
+    _autoNameAs(app.app.label);
+  });
+
+  void _autoNameAs(String name) {
     if (_name.text.trim().isEmpty || _name.text == _autoName) {
       _name.text = _autoName = defaultAgentName(name, widget.taken);
     }
-  });
+  }
 
-  bool get _canCreate => !_nameTaken && !_cwdMissing;
+  bool get _canCreate =>
+      !_nameTaken && (_desktop == null ? !_cwdMissing : _consent);
 
   Future<void> _browse() async {
     final picked = await NativeFolderPicker.pick(
@@ -133,6 +174,7 @@ class _NewAgentDialogState extends State<_NewAgentDialog> {
       color: _color,
       role: _role.text.trim(),
       task: _task.text.trim(),
+      desktop: _desktop,
     ),
   );
 
@@ -171,6 +213,12 @@ class _NewAgentDialogState extends State<_NewAgentDialog> {
                 ),
               ],
             ),
+            if (widget.desktopApps.isNotEmpty)
+              _DesktopAppsRow(
+                apps: widget.desktopApps,
+                selected: _desktop?.app,
+                onPick: _pickDesktop,
+              ),
             const SizedBox(height: 16),
             Tabs(
               index: _tab,
@@ -210,6 +258,29 @@ class _NewAgentDialogState extends State<_NewAgentDialog> {
 
   Widget _details(BuildContext context) {
     final tr = context.t.cockpit.agentGraph;
+    final desktop = _desktop;
+    if (desktop != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _Caption(tr.agentName),
+          TextField(
+            controller: _name,
+            placeholder: Text(tr.namePlaceholder),
+            onChanged: (_) => setState(() {}),
+          ),
+          if (_nameTaken) _Problem(tr.nameTaken),
+          const SizedBox(height: 12),
+          _IntegrationBox(
+            integration: desktop,
+            consent: _consent,
+            onConsent: (v) => setState(() => _consent = v),
+          ),
+          const SizedBox(height: 14),
+          _maestroToggle(context),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

@@ -13,6 +13,8 @@ import 'package:cockpit/app/cockpit/data/db/json_mongo_database_store.dart';
 import 'package:cockpit/app/cockpit/data/db/json_ssh_host_key_store.dart';
 import 'package:cockpit/app/cockpit/domain/contracts/mongo_database_store.dart';
 import 'package:cockpit/app/cockpit/data/filesystem/app_launcher_impl.dart';
+import 'package:cockpit/app/cockpit/data/agents/desktop_agent_apps_impl.dart';
+import 'package:cockpit/app/cockpit/domain/contracts/desktop_agent_apps.dart';
 import 'package:cockpit/app/cockpit/data/filesystem/content_searcher_impl.dart';
 import 'package:cockpit/app/cockpit/data/filesystem/disk_file_change_watcher.dart';
 import 'package:cockpit/app/cockpit/data/filesystem/file_reader_impl.dart';
@@ -264,6 +266,7 @@ Future<Module> buildCockpitModule({
         ..addInstance<TaskDiscovery>(TaskDiscoveryImpl(const []))
         ..addInstance<LayoutLoader>(const CkpLayoutLoader())
         ..addInstance<AppLauncherGateway>(const AppLauncherImpl())
+        ..addInstance<DesktopAgentApps>(const DesktopAgentAppsImpl())
         ..addInstance<Notifier>(notifier)
         ..addInstance<UpdateChecker>(const UpdateCheckerImpl())
         ..addInstance<UrlOpener>(const UrlOpenerImpl())

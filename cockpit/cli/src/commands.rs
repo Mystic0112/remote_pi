@@ -845,7 +845,11 @@ pub fn format_list(cmd: &str, data: &[Value]) -> Vec<String> {
                 };
                 let label = field(e, "label");
                 let name = if label.is_empty() { field(e, "title") } else { label };
-                let harness = field(e, "harness");
+                // Nó externo (app desktop): sem harness, mostra o app.
+                let mut harness = field(e, "harness");
+                if harness.is_empty() {
+                    harness = field(e, "app");
+                }
                 let harness = if harness.is_empty() {
                     String::new()
                 } else {
@@ -2011,6 +2015,8 @@ mod tests {
         let lines = format_list("peers", &data);
         assert_eq!(lines[0], "● t2     Reviewer  [claudeCode]");
         assert_eq!(lines[1], "  t5     codex");
+        let ext = vec![json!({"id": "ext:cursor", "label": "Cursor", "harness": null, "app": "cursor"})];
+        assert_eq!(format_list("peers", &ext)[0], "  ext:cursor Cursor  [cursor]");
     }
 
     #[test]

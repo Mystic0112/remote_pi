@@ -54,6 +54,7 @@ class AppSettings {
     this.searchPanelHeight = 260,
     this.tasksPanelHeight = 200,
     this.swapSidePanels = false,
+    this.codexMcpIntegration = true,
     this.railVisible = false,
     this.treeVisible = false,
     this.showCockpit = true,
@@ -169,6 +170,12 @@ class AppSettings {
   /// atalhos de cada painel seguem os mesmos.
   final bool swapSidePanels;
 
+  /// O instalador de hooks do Codex garante `[mcp_servers.cockpit]` no
+  /// `~/.codex/config.toml` a cada boot (o Codex das abas fala com o grafo por
+  /// ali). `false` = o usuário removeu a integração em Configurações: o boot
+  /// para de recolocar a entrada.
+  final bool codexMcpIntegration;
+
   /// Visibilidade do painel esquerdo (rail de projetos). Persistido entre
   /// sessões; fechado por padrão em instalações novas.
   final bool railVisible;
@@ -275,6 +282,7 @@ class AppSettings {
     double? searchPanelHeight,
     double? tasksPanelHeight,
     bool? swapSidePanels,
+    bool? codexMcpIntegration,
     bool? railVisible,
     bool? treeVisible,
     bool? showCockpit,
@@ -325,6 +333,7 @@ class AppSettings {
       searchPanelHeight: searchPanelHeight ?? this.searchPanelHeight,
       tasksPanelHeight: tasksPanelHeight ?? this.tasksPanelHeight,
       swapSidePanels: swapSidePanels ?? this.swapSidePanels,
+      codexMcpIntegration: codexMcpIntegration ?? this.codexMcpIntegration,
       railVisible: railVisible ?? this.railVisible,
       treeVisible: treeVisible ?? this.treeVisible,
       showCockpit: showCockpit ?? this.showCockpit,
@@ -386,6 +395,7 @@ class AppSettings {
     // Sempre gravado (mesmo quando false) para a migração distinguir "install
     // novo" (chave presente = false) de "upgrade sem a flag" (chave ausente).
     'swapSidePanels': swapSidePanels,
+    if (!codexMcpIntegration) 'codexMcpIntegration': false,
     if (railVisible) 'railVisible': true,
     if (treeVisible) 'treeVisible': true,
     // Sempre gravado: a migração distingue "install novo" (chave presente) de
@@ -468,6 +478,7 @@ class AppSettings {
       searchPanelHeight: (json['searchPanelHeight'] as num?)?.toDouble() ?? 260,
       tasksPanelHeight: (json['tasksPanelHeight'] as num?)?.toDouble() ?? 200,
       swapSidePanels: json['swapSidePanels'] as bool? ?? false,
+      codexMcpIntegration: json['codexMcpIntegration'] as bool? ?? true,
       railVisible: json['railVisible'] as bool? ?? false,
       treeVisible: json['treeVisible'] as bool? ?? false,
       showCockpit: json['showCockpit'] as bool? ?? true,

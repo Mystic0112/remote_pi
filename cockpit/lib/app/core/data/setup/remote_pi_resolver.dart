@@ -29,6 +29,16 @@ String? cockpitCliDir() {
   return '$home/.cockpit/bin${kDebugMode ? '-debug' : ''}';
 }
 
+/// Caminho absoluto da CLI materializada em [cockpitCliDir]: o `command` das
+/// entradas MCP (`cockpit mcp`) nos configs dos agentes. Um só formato pra
+/// quem escreve a entrada (dialog de apps desktop e instalador do Codex), senão
+/// os dois a reescreveriam um do outro.
+String? cockpitCliPath() {
+  final dir = cockpitCliDir();
+  if (dir == null) return null;
+  return '$dir/cockpit${Platform.isWindows ? '.exe' : ''}';
+}
+
 /// Diretório estável do helper de hooks, compartilhado entre builds.
 String? cockpitHookDir() {
   final home = remotePiHome();

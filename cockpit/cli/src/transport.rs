@@ -76,16 +76,34 @@ const FLAVOR: Option<&str> = option_env!("COCKPIT_FLAVOR");
 /// pelo app instalado, que pode ser bem mais velho — deu "tab @focused does not
 /// exist" porque aquele app nem conhecia o sentinela. O outro flavor continua
 /// como fallback: melhor falar com o app errado do que não falar com nenhum.
+///
+/// É também a **descoberta** do servidor MCP (`cockpit mcp`): um app desktop
+/// (Claude Desktop, Cursor…) spawna a CLI sem env nenhuma do Cockpit, e o
+/// caminho bem conhecido do socket é o arquivo de descoberta no POSIX.
 #[cfg(unix)]
 fn candidate_sockets() -> Vec<String> {
+    candidate_sockets_from(
+        env_non_empty("COCKPIT_STATUS_SOCK"),
+        crate::util::home_dir(),
+        FLAVOR == Some("debug"),
+    )
+}
+
+/// Ordem pura de [candidate_sockets] (testável sem mexer no env do processo).
+#[cfg_attr(not(unix), allow(dead_code))]
+fn candidate_sockets_from(
+    env_sock: Option<String>,
+    home: Option<String>,
+    debug_first: bool,
+) -> Vec<String> {
     let mut out = Vec::new();
-    if let Some(path) = env_non_empty("COCKPIT_STATUS_SOCK") {
+    if let Some(path) = env_sock {
         out.push(path);
     }
-    if let Some(home) = crate::util::home_dir() {
+    if let Some(home) = home {
         let release = format!("{home}/.cockpit/status.sock");
         let debug = format!("{home}/.cockpit/status-debug.sock");
-        if FLAVOR == Some("debug") {
+        if debug_first {
             out.push(debug);
             out.push(release);
         } else {
@@ -187,13 +205,17 @@ pub fn transport_configured() -> bool {
 /// Fora de um terminal do Cockpit, encerra com exit 3 (mesma mensagem da CLI
 /// Dart). Falha de rede também é exit 3; resposta ausente/malformada vira um
 /// `{"ok": false, "error": …}` pro chamador tratar como erro de aplicação.
-pub fn request(mut req: Value, timeout: Duration) -> Value {
+pub fn request(req: Value, timeout: Duration) -> Value {
+    try_request(req, timeout).unwrap_or_else(|e| die(&format!("cockpit: {e}"), 3))
+}
+
+/// [request] sem matar o processo: `Err` = não há app pra falar (sem socket,
+/// conexão recusada). Quem precisa seguir vivo (o servidor MCP) usa esta.
+pub fn try_request(mut req: Value, timeout: Duration) -> Result<Value, String> {
     if !transport_configured() {
-        die(
-            "cockpit: no Cockpit app to talk to (COCKPIT_STATUS_SOCK is unset and \
-no socket found in ~/.cockpit). Is the app running?",
-            3,
-        );
+        return Err("no Cockpit app to talk to (COCKPIT_STATUS_SOCK is unset and \
+no socket found in ~/.cockpit). Is the app running?"
+            .to_string());
     }
     req["type"] = json!("cmd");
     if let Ok(tok) = std::env::var("COCKPIT_STATUS_TOKEN") {
@@ -204,11 +226,10 @@ no socket found in ~/.cockpit). Is the app running?",
 
     let mut conn = match connect() {
         Ok(Some(c)) => c,
-        Ok(None) => die(
-            "cockpit: not inside a Cockpit terminal (COCKPIT_STATUS_SOCK is unset)",
-            3,
-        ),
-        Err(e) => die(&format!("cockpit: could not connect to app: {e}"), 3),
+        Ok(None) => {
+            return Err("not inside a Cockpit terminal (COCKPIT_STATUS_SOCK is unset)".to_string())
+        }
+        Err(e) => return Err(format!("could not connect to app: {e}")),
     };
     let _ = conn.set_read_timeout(timeout);
 
@@ -218,7 +239,7 @@ no socket found in ~/.cockpit). Is the app running?",
         .write_all(payload.as_bytes())
         .and_then(|_| conn.flush())
     {
-        die(&format!("cockpit: could not connect to app: {e}"), 3);
+        return Err(format!("could not connect to app: {e}"));
     }
 
     // O servidor responde UMA linha e fecha. Lemos até a primeira quebra (ou
@@ -241,13 +262,13 @@ no socket found in ~/.cockpit). Is the app running?",
     let raw = String::from_utf8_lossy(&buf);
     let line = raw.trim();
     if line.is_empty() {
-        return json!({"ok": false, "error": "no response from app"});
+        return Ok(json!({"ok": false, "error": "no response from app"}));
     }
-    match serde_json::from_str::<Value>(line) {
+    Ok(match serde_json::from_str::<Value>(line) {
         Ok(v) if v.is_object() => v,
         Ok(_) => json!({"ok": false, "error": "malformed response"}),
         Err(_) => json!({"ok": false, "error": "malformed response"}),
-    }
+    })
 }
 
 /// `resp["ok"] == true`. Emite no **stderr** o aviso que a resposta trouxer.
@@ -275,4 +296,24 @@ pub fn error_text(resp: &Value) -> String {
 /// Encerra com o erro da resposta (exit 1) — padrão dos comandos "simples".
 pub fn fail_with(resp: &Value) -> ! {
     die(&format!("cockpit: {}", error_text(resp)), 1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::candidate_sockets_from;
+
+    #[test]
+    fn env_primeiro_depois_o_flavor_proprio() {
+        let h = Some("/h".to_string());
+        assert_eq!(
+            candidate_sockets_from(Some("/x.sock".into()), h.clone(), false),
+            ["/x.sock", "/h/.cockpit/status.sock", "/h/.cockpit/status-debug.sock"]
+        );
+        // Sem env (app desktop spawnando `cockpit mcp`): só os bem conhecidos.
+        assert_eq!(
+            candidate_sockets_from(None, h, true),
+            ["/h/.cockpit/status-debug.sock", "/h/.cockpit/status.sock"]
+        );
+        assert!(candidate_sockets_from(None, None, false).is_empty());
+    }
 }

@@ -9,11 +9,15 @@ import 'package:cockpit/app/core/data/setup/remote_pi_resolver.dart';
 import 'package:flutter/foundation.dart';
 
 /// [TerminalStatusServer] híbrido por plataforma:
-/// - **POSIX**: socket Unix em `~/.cockpit/status[-debug].sock` (permissão do
-///   arquivo já protege contra outros usuários).
+/// - **POSIX**: socket Unix em `~/.cockpit/status[-debug].sock`, só do dono:
+///   pasta 0700 e socket 0600 ([bindPrivateUnixSocket]). É o mesmo caminho que
+///   o `COCKPIT_STATUS_SOCK` das abas aponta; a CLI de fora de uma aba (o
+///   `cockpit mcp` dos apps desktop) cai nele por ser bem conhecido.
 /// - **Windows**: TCP loopback `127.0.0.1:<porta-efêmera>` + **token**
 ///   (loopback é acessível por qualquer processo local; o token valida a
-///   origem). O Dart não suporta socket Unix no Windows.
+///   origem). O Dart não suporta socket Unix no Windows. O `{port, tok}` vai
+///   em `%USERPROFILE%\.cockpit\status[-debug].json`, que herda a ACL do
+///   perfil (dono + SYSTEM/Administradores) — o equivalente do 0600 lá.
 ///
 /// Cada conexão do `cockpit-hook` manda **uma linha JSON** (`{paneId, st, sid,
 /// tx, tok?}`) e fecha.
@@ -71,15 +75,7 @@ class TerminalStatusServerImpl implements TerminalStatusServer {
         _server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
         await _writeEndpointFile();
       } else {
-        final file = File(_socketPath);
-        await file.parent.create(recursive: true);
-        // Remove socket órfão do ciclo anterior (bind falha se já existe).
-        if (await file.exists()) await file.delete();
-        final address = InternetAddress(
-          _socketPath,
-          type: InternetAddressType.unix,
-        );
-        _server = await ServerSocket.bind(address, 0);
+        _server = await bindPrivateUnixSocket(_socketPath);
       }
       _server!.listen(_handleConnection, onError: (_) {});
     } catch (e) {
@@ -264,5 +260,37 @@ class TerminalStatusServerImpl implements TerminalStatusServer {
     } on Object catch (_) {
       // best-effort: socket/endpoint órfão é apagado no próximo start.
     }
+  }
+}
+
+/// Bind do socket Unix em [path] visível só ao dono: a pasta vira 0700 ANTES
+/// do bind (outro usuário não atravessa nem na janela até o chmod) e o socket
+/// 0600 logo depois, antes de qualquer `listen`. Sem isso valia o umask do
+/// processo (002 em muita distro: pasta 0775, socket `srwxrwxr-x`, ou seja,
+/// conectável pelo grupo). Socket órfão do ciclo anterior é apagado (o bind
+/// falharia com "address in use").
+@visibleForTesting
+Future<ServerSocket> bindPrivateUnixSocket(String path) async {
+  final dir = File(path).parent;
+  await dir.create(recursive: true);
+  await _chmod('700', dir.path);
+  if (await FileSystemEntity.type(path, followLinks: false) !=
+      FileSystemEntityType.notFound) {
+    await File(path).delete();
+  }
+  final server = await ServerSocket.bind(
+    InternetAddress(path, type: InternetAddressType.unix),
+    0,
+  );
+  await _chmod('600', path);
+  return server;
+}
+
+Future<void> _chmod(String mode, String path) async {
+  try {
+    await Process.run('chmod', [mode, path]);
+  } on ProcessException catch (e) {
+    // Sem `chmod` no PATH: fica o umask; registra pra diagnóstico.
+    DiagnosticsLog.instance.warn('status-server', 'chmod $mode', error: e);
   }
 }

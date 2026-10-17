@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cockpit/app/cockpit/data/hooks/hook_installer_base.dart';
+import 'package:cockpit/app/cockpit/domain/entities/desktop_agent_app.dart';
+import 'package:cockpit/app/cockpit/domain/services/mcp_config_merge.dart';
+import 'package:cockpit/app/core/data/setup/remote_pi_resolver.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
@@ -26,8 +29,20 @@ import 'package:flutter/foundation.dart';
 /// `"caminho-do-hooks.json:evento_snake:índice-do-grupo:índice-do-handler"`, e
 /// o hash é `sha256:` sobre o JSON canônico (chaves ordenadas, sem espaços) da
 /// identidade normalizada do handler.
+///
+/// 3. Garante `[mcp_servers.cockpit]` (`cockpit mcp --agent codex-desktop`)
+///    no mesmo `config.toml`: o sandbox do Codex bloqueia a CLI de shell (tira
+///    as envs `COCKPIT_*` e o acesso ao socket), mas servidor MCP roda fora
+///    dele. Rodando sob uma aba o `cockpit mcp` age como ela; no app desktop
+///    do Codex (mesmo config) cai no nó externo `ext:codex-desktop`. É a mesma
+///    entrada que o dialog de apps desktop escreve, então nenhum dos dois
+///    duplica ou reescreve a do outro. [installMcp] `false` (o usuário removeu
+///    a integração em Configurações, `AppSettings.codexMcpIntegration`) = não
+///    recoloca; uma entrada que já esteja lá também não é tocada.
 class CodexHookInstallerImpl extends HookInstallerBase {
-  const CodexHookInstallerImpl();
+  const CodexHookInstallerImpl({this.installMcp = true});
+
+  final bool installMcp;
 
   @override
   String get harnessName => 'codex';
@@ -82,6 +97,7 @@ class CodexHookInstallerImpl extends HookInstallerBase {
       hooksPath: hooksFile.path,
       command: tagged,
       placements: placements,
+      mcpCommand: installMcp ? await mcpCommand() : null,
     );
     if (kDebugMode) {
       debugPrint('[codex-hook] entries instalados em ${hooksFile.path}');
@@ -140,19 +156,40 @@ class CodexHookInstallerImpl extends HookInstallerBase {
     return placements;
   }
 
-  /// Reescreve o bloco de trust no `config.toml`, preservando tudo que está fora
-  /// dos delimitadores.
+  /// `command` da entrada MCP: a CLI materializada, se existe. `null` (dev sem
+  /// bundle nem cópia prévia) = a entrada fica de fora.
+  @visibleForTesting
+  Future<String?> mcpCommand() async {
+    final path = cockpitCliPath();
+    return path != null && await File(path).exists() ? path : null;
+  }
+
+  /// Reescreve o bloco de trust no `config.toml` (e a entrada MCP, com
+  /// [mcpCommand]), preservando tudo que está fora dos delimitadores. Só
+  /// escreve se algo mudou; antes da primeira escrita guarda uma cópia.
   Future<void> _writeTrust({
     required File configFile,
     required String hooksPath,
     required String command,
     required Map<String, int> placements,
+    String? mcpCommand,
   }) async {
-    var content = '';
-    if (await configFile.exists()) {
-      content = await configFile.readAsString();
+    final raw = await configFile.exists()
+        ? await configFile.readAsString()
+        : '';
+    // A entrada MCP entra ANTES do bloco: o merge nunca vê (nem come) o bloco.
+    var content = _stripOurBlock(raw);
+    if (mcpCommand != null) {
+      try {
+        content = mergeTomlMcpServer(
+          content,
+          command: mcpCommand,
+          args: mcpServerArgs(DesktopAgentApp.codexDesktop.id),
+        );
+      } on FormatException {
+        // `cockpit` já definido de outro jeito pelo usuário: não mexe.
+      }
     }
-    content = _stripOurBlock(content);
 
     final buffer = StringBuffer()
       ..writeln(_tomlBegin)
@@ -180,7 +217,24 @@ class CodexHookInstallerImpl extends HookInstallerBase {
 
     final head = content.trimRight();
     final body = head.isEmpty ? '' : '$head\n\n';
-    await configFile.writeAsString('$body$buffer');
+    final out = '$body$buffer';
+    if (out == raw) return;
+    await _backupOnce(configFile);
+    await configFile.writeAsString(out);
+  }
+
+  /// `config.toml.cockpit-bak`, uma vez só (a primeira escrita do Cockpit). 0600:
+  /// o config pode ter tokens de outros servidores MCP.
+  Future<void> _backupOnce(File config) async {
+    final bak = File('${config.path}.cockpit-bak');
+    if (!await config.exists() || await bak.exists()) return;
+    await config.copy(bak.path);
+    if (Platform.isWindows) return;
+    try {
+      await Process.run('chmod', ['600', bak.path]);
+    } on ProcessException {
+      // sem chmod: fica a permissão herdada do original.
+    }
   }
 
   /// Remove um bloco nosso anterior (delimitadores inclusos). Tolera arquivo sem

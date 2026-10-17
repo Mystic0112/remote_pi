@@ -2,6 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:cockpit/app/cockpit/domain/contracts/terminal_gateway.dart';
+import 'package:cockpit/app/cockpit/domain/contracts/terminal_status_server.dart';
+import 'package:cockpit/app/cockpit/ui/viewmodels/cockpit_cli_handler.dart';
+import 'package:cockpit/app/cockpit/ui/viewmodels/agent_message_delivery.dart';
+import 'package:cockpit/app/core/domain/result.dart';
 import 'package:cockpit/app/cockpit/domain/services/terminal_harness_monitor.dart';
 import 'package:cockpit/app/core/domain/entities/harness.dart';
 import 'package:fake_async/fake_async.dart';
@@ -217,6 +221,123 @@ void main() {
         unawaited(s.dispose());
         async.flushMicrotasks();
       });
+    });
+  });
+
+  // Codex CLI roda as sessões num daemon compartilhado: o `cockpit mcp` não
+  // tem árvore de aba, então cada chamada diz `from` + `from_token`.
+  group('from do cockpit mcp (actAsMcpFrom)', () {
+    test('aba Codex com token age como ela; sem token, errado, outra aba, '
+        'desconhecida e ausente', () async {
+      final codexMon = _FakeMonitor();
+      final claudeMon = _FakeMonitor();
+      final codex = _session(id: 't50', monitor: codexMon)
+        ..restoreManualLabel('Builder');
+      final claude = _session(id: 't3', monitor: claudeMon);
+      codexMon.onChange!(HarnessKind.codex);
+      claudeMon.onChange!(HarnessKind.claudeCode);
+      final tabs = [codex, claude];
+      final token = codex.rotateMcpFromToken();
+      CockpitCommand cmd(
+        String verb,
+        Object? from, {
+        Object? tok,
+        String tabId = 'ext:codex-desktop',
+      }) => CockpitCommand(
+        cmd: verb,
+        tabId: tabId,
+        args: {'from': ?from, 'from_token': ?tok, 'timeout': 0},
+      );
+      String? tabOf(Result<CockpitCommand, String> r) =>
+          r.fold((c) => c.tabId, (e) => 'ERR $e');
+      const badToken = 'ERR from: missing or invalid from_token for tab "t50"';
+
+      expect(
+        token,
+        matches(RegExp(r'^[A-Za-z0-9_-]{22}$')),
+        reason: '128 bits',
+      );
+      for (final verb in ['msg', 'peers', 'agents', 'ext-wait']) {
+        expect(tabOf(actAsMcpFrom(cmd(verb, 't50', tok: token), tabs)), 't50');
+      }
+      expect(
+        tabOf(actAsMcpFrom(cmd('peers', ' builder ', tok: token), tabs)),
+        't50',
+      );
+      // Sem token, token errado (inclusive prefixo) ou de outro tipo: recusa.
+      expect(
+        tabOf(actAsMcpFrom(cmd('peers', 't50'), tabs)),
+        startsWith(badToken),
+      );
+      for (final bad in ['nope', token.substring(1), '${token}x', 42]) {
+        expect(
+          tabOf(actAsMcpFrom(cmd('msg', 't50', tok: bad), tabs)),
+          startsWith(badToken),
+        );
+      }
+      // Rotação: a apresentação nova invalida o token anterior.
+      final next = codex.rotateMcpFromToken();
+      expect(next, isNot(token));
+      expect(
+        tabOf(actAsMcpFrom(cmd('peers', 't50', tok: token), tabs)),
+        startsWith(badToken),
+      );
+      expect(tabOf(actAsMcpFrom(cmd('peers', 't50', tok: next), tabs)), 't50');
+      // Identidade do startup (pid/env, resolvida pelo app) dispensa token.
+      expect(
+        tabOf(actAsMcpFrom(cmd('peers', 't50', tabId: 't50'), tabs)),
+        't50',
+      );
+      expect(
+        tabOf(actAsMcpFrom(cmd('peers', 't3'), tabs)),
+        startsWith('ERR from: tab "t3" is not a Codex terminal tab'),
+      );
+      expect(
+        tabOf(actAsMcpFrom(cmd('peers', 't99'), tabs)),
+        startsWith('ERR from: no tab with id or label "t99"'),
+      );
+      // Ausente (ou vazio): identidade do startup, intacta.
+      expect(
+        tabOf(actAsMcpFrom(cmd('peers', null), tabs)),
+        'ext:codex-desktop',
+      );
+      expect(tabOf(actAsMcpFrom(cmd('peers', ' '), tabs)), 'ext:codex-desktop');
+      // Fora dos verbos de agente, `from` não significa nada.
+      expect(
+        tabOf(actAsMcpFrom(cmd('write', 't3'), tabs)),
+        'ext:codex-desktop',
+      );
+      // Aba fechada: o token morre com ela (e a aba nem resolve mais).
+      await codex.dispose();
+      expect(codex.acceptsMcpFromToken(next), isFalse);
+      expect(
+        tabOf(actAsMcpFrom(cmd('peers', 't50', tok: next), [claude])),
+        startsWith('ERR from: no tab with id or label "t50"'),
+      );
+      await claude.dispose();
+    });
+
+    test('apresentação pra aba Codex leva from + from_token novos', () async {
+      final mon = _FakeMonitor();
+      final codex = _session(id: 't50', monitor: mon);
+      final claude = _session(id: 't3', monitor: _FakeMonitor());
+      mon.onChange!(HarnessKind.codex);
+      final t1 = mcpFromTokenFor(codex);
+      expect(codex.acceptsMcpFromToken(t1), isTrue);
+      final intro = linkIntroText(
+        claude,
+        via: agentChannel(codex),
+        selfId: codex.id,
+        token: mcpFromTokenFor(codex),
+      );
+      expect(codex.acceptsMcpFromToken(t1), isFalse, reason: 'rotacionou');
+      final t2 = RegExp(r'from_token: "([^"]+)"').firstMatch(intro)!.group(1);
+      expect(intro, contains('from: "t50"'));
+      expect(codex.acceptsMcpFromToken(t2), isTrue);
+      // Aba sem Codex não ganha token.
+      expect(mcpFromTokenFor(claude), '');
+      await codex.dispose();
+      await claude.dispose();
     });
   });
 }

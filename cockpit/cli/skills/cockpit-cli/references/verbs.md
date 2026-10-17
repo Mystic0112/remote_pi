@@ -25,7 +25,21 @@ shows flags, output shape and the mistakes to avoid.
   address the peer by `id`. Empty (`(none)`) when the human linked nobody.
   When a link is created both sides receive `[from: cockpit] You are now
   connected to <name> (<harness>). Talk to it with: cockpit msg --to <label|id>
-  "..."`.
+  "..."`. A peer with `app` (+ `online`) is a desktop app (`ext:<app>` id):
+  `msg` to it is queued and delivered when it calls its `wait_messages` tool.
+- `cockpit mcp --agent <claude-desktop|cursor|antigravity-ide|codex-desktop>`
+  — stdio MCP server (JSON-RPC, one message per line) that a desktop agent
+  app runs from its MCP config; the New agent dialog (Desktop apps) writes
+  that entry. Tools: `peers`, `send {to, text}`, `wait_messages
+  {timeout_seconds}` (default 45, max 55: call again to keep waiting),
+  `list_agents`. Run under a Cockpit tab (Codex: Cockpit adds the entry to
+  `~/.codex/config.toml`) it acts as that tab — `send` = `msg`, `peers`,
+  `list_agents`, and `wait_messages` returns messages to the tab since the
+  last call (also typed into the terminal, as usual). When Codex spawns it
+  outside the tab, every tool takes `from` + `from_token` (from the latest
+  connection message typed into the tab); `from` without the tab's current
+  token is rejected. Removing the integration (Settings → Automations) drops
+  only the `cockpit` entry.
 - `cockpit new-tab [--cwd <dir>] [--title <name>] [--split h|v]` — open a new
   **terminal tab** in the app and print its id (`t12`). `--cwd` defaults to
   your current directory; `--title` sets the stable tab label (so `send`/

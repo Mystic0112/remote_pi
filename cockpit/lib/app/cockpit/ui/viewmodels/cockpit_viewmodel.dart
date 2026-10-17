@@ -113,6 +113,7 @@ import 'package:cockpit/app/cockpit/ui/states/pane_node.dart';
 import 'package:cockpit/app/cockpit/ui/viewmodels/agent_file_activity.dart';
 import 'package:cockpit/app/cockpit/ui/session/agent_graph_session.dart';
 import 'package:cockpit/app/cockpit/ui/viewmodels/agent_graph_store.dart';
+import 'package:cockpit/app/cockpit/domain/contracts/desktop_agent_apps.dart';
 import 'package:cockpit/app/cockpit/ui/viewmodels/agent_message_log.dart';
 import 'package:cockpit/app/cockpit/ui/viewmodels/cockpit_cli_handler.dart';
 import 'package:cockpit/app/cockpit/ui/viewmodels/telemetry_cli_handler.dart';
@@ -184,6 +185,7 @@ class CockpitViewModel extends ChangeNotifier implements DocumentHost {
     this._neovim,
     this._telemetryStores,
     this._telemetryIngest,
+    this.desktopApps,
   ) {
     _fileEditorFacade = FileEditorFacade(
       FileEditorRegistry({
@@ -721,6 +723,12 @@ class CockpitViewModel extends ChangeNotifier implements DocumentHost {
   /// uma mensagem não reconstrói o shell inteiro.
   final AgentMessageLog agentMessages = AgentMessageLog();
 
+  /// Aba cuja árvore de processos contém o processo de [pids] (`[pid, ppid,
+  /// …]` do `cockpit mcp` do Codex de uma aba). Ver
+  /// [TerminalHarnessMonitor.sessionOwningProcess].
+  Future<String?> tabOwningProcess(List<int> pids, {String? hint}) =>
+      _harnessMonitor.sessionOwningProcess(pids, hint: hint);
+
   /// Arquivos tocados por agente (hook ou heurística de git). Listener próprio,
   /// como o [agentMessages].
   final AgentFileActivity agentFiles = AgentFileActivity();
@@ -777,6 +785,10 @@ class CockpitViewModel extends ChangeNotifier implements DocumentHost {
   // editor por projeto (janela `--since-edit` da CLI).
   final TelemetryStoreProvider _telemetryStores;
   final TelemetryIngest _telemetryIngest;
+
+  /// Apps desktop de agente (nós externos do grafo via MCP): detecção,
+  /// integração do config e launch.
+  final DesktopAgentApps desktopApps;
   final _lastEditAt = <String, DateTime>{};
 
   /// Último save do editor no projeto (`null` = nenhum nesta sessão).

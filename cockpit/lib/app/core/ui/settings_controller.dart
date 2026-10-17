@@ -279,6 +279,10 @@ class SettingsController extends ChangeNotifier {
   void setSwapSidePanels(bool value) =>
       _apply(_settings.copyWith(swapSidePanels: value));
 
+  /// Integração MCP do Codex (ver [AppSettings.codexMcpIntegration]).
+  void setCodexMcpIntegration(bool value) =>
+      _apply(_settings.copyWith(codexMcpIntegration: value));
+
   /// Liga/desliga "iniciar com o sistema": grava a preferência na hora (UI
   /// reflete imediato) e aplica no SO em background; se o SO recusar, reconcilia
   /// a preferência com o estado efetivo lido de volta.

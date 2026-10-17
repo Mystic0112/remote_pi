@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' show Random;
 
 import 'package:cockpit/app/cockpit/domain/contracts/terminal_gateway.dart';
 import 'package:cockpit/app/cockpit/domain/contracts/terminal_scrollback_store.dart';
@@ -267,6 +268,32 @@ class TerminalSession extends PaneItem {
   /// sempre `claude --resume <id>` — que falha com "No conversation found" se o
   /// id veio do Codex.
   AgentHarness agentHarness = AgentHarness.claude;
+
+  /// Segredo do `from` do `cockpit mcp` (ver `actAsMcpFrom`): o Cockpit o
+  /// digita só nesta aba, na apresentação do grafo; troca a cada apresentação
+  /// e morre com a aba (o [dispose] zera, e a aba fechada nem resolve mais).
+  String? _mcpFromToken;
+
+  /// Gera e passa a exigir um token novo (128 bits, base64url sem padding);
+  /// o anterior deixa de valer.
+  String rotateMcpFromToken() {
+    final r = Random.secure();
+    final bytes = [for (var i = 0; i < 16; i++) r.nextInt(256)];
+    return _mcpFromToken = base64Url.encode(bytes).replaceAll('=', '');
+  }
+
+  /// [token] é o token atual desta aba (comparação em tempo constante).
+  bool acceptsMcpFromToken(String? token) {
+    final want = _mcpFromToken;
+    if (want == null || token == null || token.length != want.length) {
+      return false;
+    }
+    var diff = 0;
+    for (var i = 0; i < want.length; i++) {
+      diff |= want.codeUnitAt(i) ^ token.codeUnitAt(i);
+    }
+    return diff == 0;
+  }
 
   bool _unseen = false;
   @override
@@ -704,6 +731,7 @@ class TerminalSession extends PaneItem {
   @override
   Future<void> dispose() async {
     _disposed = true;
+    _mcpFromToken = null;
     _monitor?.unregisterSession(id);
     _notifyDebounce?.cancel();
     _outputIdleTimer?.cancel();

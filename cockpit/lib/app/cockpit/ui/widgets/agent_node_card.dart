@@ -1,3 +1,4 @@
+import 'package:cockpit/app/cockpit/ui/session/external_agent.dart';
 import 'package:cockpit/app/cockpit/ui/session/pane_item.dart';
 import 'package:cockpit/app/cockpit/ui/session/terminal_session.dart';
 import 'package:cockpit/app/cockpit/ui/widgets/agent_graph_painter.dart';
@@ -32,7 +33,8 @@ class HarnessIcon extends StatelessWidget {
   );
 }
 
-/// Nó do grafo: card do agente (aba de terminal) + a porta (à direita) de onde se arrasta um link. A caixa inclui a metade
+/// Nó do grafo: card do agente (aba de terminal ou nó externo — app desktop)
+/// + a porta (à direita) de onde se arrasta um link. A caixa inclui a metade
 /// de fora da porta — fora dela não há hit test.
 class AgentNodeCard extends StatelessWidget {
   const AgentNodeCard({
@@ -69,7 +71,11 @@ class AgentNodeCard extends StatelessWidget {
     final colors = context.colors;
     final accent = color;
     final s = session;
-    final harness = s is TerminalSession ? s.activeHarness : null;
+    final harness = switch (s) {
+      ExternalAgent(:final app) => app.icon,
+      TerminalSession(:final activeHarness) => activeHarness,
+      _ => null,
+    };
     final spec = harness == null ? null : HarnessCatalog.getSpec(harness);
     return SizedBox(
       width: kAgentNodeWidth + kAgentPortRadius,
@@ -123,18 +129,21 @@ class AgentNodeCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      basenameOf(
-                        s is TerminalSession
-                            ? s.currentDirectory ?? s.workingDirectory
-                            : s.workingDirectory,
+                    if (s is ExternalAgent)
+                      _DesktopLine(app: s.app.label)
+                    else
+                      Text(
+                        basenameOf(
+                          s is TerminalSession
+                              ? s.currentDirectory ?? s.workingDirectory
+                              : s.workingDirectory,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        style: context.typo.mono.copyWith(
+                          fontSize: 11,
+                          color: colors.text3,
+                        ),
                       ),
-                      overflow: TextOverflow.ellipsis,
-                      style: context.typo.mono.copyWith(
-                        fontSize: 11,
-                        color: colors.text3,
-                      ),
-                    ),
                     const Spacer(),
                     _StatusChip(session: s),
                   ],
@@ -172,6 +181,42 @@ class AgentNodeCard extends StatelessWidget {
   }
 }
 
+/// Selo "desktop" + nome do app, no lugar da pasta do terminal.
+class _DesktopLine extends StatelessWidget {
+  const _DesktopLine({required this.app});
+  final String app;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final small = context.typo.label.copyWith(fontSize: 11);
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+          decoration: BoxDecoration(
+            color: colors.panel3,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: colors.border2),
+          ),
+          child: Text(
+            context.t.cockpit.agentGraph.desktopBadge,
+            style: small.copyWith(fontSize: 10, color: colors.text2),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            app,
+            overflow: TextOverflow.ellipsis,
+            style: small.copyWith(color: colors.text3),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _StatusChip extends StatelessWidget {
   const _StatusChip({required this.session});
   final PaneItem session;
@@ -182,6 +227,16 @@ class _StatusChip extends StatelessWidget {
     final tr = context.t.cockpit.agentGraph;
     final s = session;
     final (label, color, pulsing) = switch (s) {
+      ExternalAgent() when s.isWorking => (
+        tr.statusWorking,
+        colors.accent,
+        true,
+      ),
+      ExternalAgent(:final online) => (
+        online ? tr.statusOnline : tr.statusOffline,
+        online ? colors.online : colors.text4,
+        false,
+      ),
       TerminalSession(:final status) => switch (status) {
         TerminalStatus.working => (tr.statusWorking, colors.accent, true),
         TerminalStatus.waiting => (tr.statusWaiting, colors.warn, false),
@@ -189,13 +244,16 @@ class _StatusChip extends StatelessWidget {
       },
       _ => (tr.statusIdle, colors.text3, false),
     };
+    final queued = s is ExternalAgent && s.pending > 0
+        ? ' · ${tr.queued(n: s.pending)}'
+        : '';
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         _StatusDot(color: color, pulsing: pulsing),
         const SizedBox(width: 6),
         Text(
-          label,
+          '$label$queued',
           style: context.typo.label.copyWith(fontSize: 11, color: color),
         ),
       ],

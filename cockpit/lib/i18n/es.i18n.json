@@ -965,7 +965,36 @@
       "renameTitle": "Renombrar agente",
       "makeMaestro": "Hacer maestro",
       "removeMaestro": "Quitar maestro",
-      "closeTab": "Cerrar pestaña"
+      "closeTab": "Cerrar pestaña",
+      "removeFromCanvas": "Quitar del lienzo",
+      "desktopApps": "Apps de escritorio",
+      "desktopBadge": "escritorio",
+      "statusOnline": "En línea",
+      "statusOffline": "Desconectado",
+      "queued": "${n} en cola",
+      "agentName": "Nombre",
+      "integration": "Integración",
+      "integrationHint": "Cockpit agrega un servidor MCP llamado \"cockpit\" a este archivo y guarda una copia de seguridad al lado. Los demás servidores no se tocan.",
+      "integrationConsent": "Agregar el servidor MCP de Cockpit a la configuración de ${app}",
+      "restartHint": "Reinicia ${app} si ya estaba abierto para que cargue el servidor MCP de Cockpit; luego pídele que llame a wait_messages.",
+      "integrationError": {
+        "invalidConfig": "${path} no es un JSON/TOML simple que Cockpit pueda editar con seguridad (comentarios u otro formato). No se cambió nada.",
+        "cliMissing": "La CLI de Cockpit aún no está instalada (${path}). Reinicia Cockpit e inténtalo de nuevo.",
+        "writeFailed": "No se pudo actualizar la configuración: ${detail}"
+      }
+    },
+    "desktopIntegration": {
+      "section": "Integraciones con apps de escritorio (MCP)",
+      "none": "No se detectó ninguna app de escritorio compatible.",
+      "configured": "Entrada de Cockpit en ${path}",
+      "missing": "Sin entrada de Cockpit en ${path}",
+      "removeTitle": "¿Quitar la integración de Cockpit de ${app}?",
+      "removeMessage": "Cockpit quita solo su propia entrada \"cockpit\" de ${path} y guarda una copia de seguridad al lado. El resto del archivo queda igual.",
+      "codexNote": "Codex en las terminales de Cockpit usa esta misma entrada: dejará de llegar a los otros agentes, y Cockpit ya no la volverá a añadir al iniciar. Puedes añadirla otra vez en Ajustes → Automatizaciones.",
+      "removed": "Integración de Cockpit quitada de ${app}. Se guardó una copia de seguridad del config al lado.",
+      "added": "Integración de Cockpit añadida a ${app}. Reinícialo si está abierto.",
+      "removeNodeTitle": "¿Quitar ${name} del lienzo?",
+      "removeNodeAlso": "Quitar también la integración de Cockpit del config de ${app}"
     }
   },
   "settings": {

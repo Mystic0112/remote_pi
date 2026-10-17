@@ -353,6 +353,71 @@ void main() {
       monitor.dispose();
     });
   });
+
+  group('sessionOwningProcess (cockpit mcp do Codex de uma aba)', () {
+    ProcessSnapshot p(int pid, int ppid, String exe) =>
+        ProcessSnapshot(pid: pid, ppid: ppid, executable: exe, argv: [exe]);
+    // t1: zsh(100) → codex(110) → cockpit mcp(120). t2: bash(200).
+    final table = [
+      p(100, 1, 'zsh'),
+      p(110, 100, 'codex'),
+      p(120, 110, 'cockpit'),
+      p(200, 1, 'bash'),
+    ];
+
+    test('sobe pelos ppid até a raiz de uma aba', () {
+      final roots = {100: 't1', 200: 't2'};
+      expect(TerminalHarnessMonitor.ownerOfProcess(120, roots, table), 't1');
+      expect(TerminalHarnessMonitor.ownerOfProcess(200, roots, table), 't2');
+      // Fora de qualquer aba (app desktop spawnou o MCP).
+      expect(TerminalHarnessMonitor.ownerOfProcess(999, roots, table), isNull);
+      // Ciclo na tabela não trava.
+      expect(
+        TerminalHarnessMonitor.ownerOfProcess(5, roots, [
+          p(5, 6, 'a'),
+          p(6, 5, 'b'),
+        ]),
+        isNull,
+      );
+    });
+
+    test('hint de env só vale onde a árvore da aba não é visível', () async {
+      final monitor = TerminalHarnessMonitor(
+        provider: FakeProcessTreeProvider(snapshotsToReturn: table),
+        pollInterval: const Duration(hours: 1),
+      );
+      for (final (id, root) in [('t1', 100), ('t2', 200)]) {
+        monitor.registerSession(
+          sessionId: id,
+          rootPid: () => root,
+          onHarnessChanged: (_) {},
+        );
+      }
+      // Aba remota: sem pid local.
+      monitor.registerSession(
+        sessionId: 'r1',
+        rootPid: () => null,
+        onHarnessChanged: (_) {},
+      );
+      // Cadeia que a CLI manda (Linux/macOS): sobe até a raiz de t1.
+      expect(await monitor.sessionOwningProcess([120, 110, 100, 1]), 't1');
+      // Só o pid (Windows): sobe pela tabela do provider.
+      expect(await monitor.sessionOwningProcess([120]), 't1');
+      // Pid acha a aba: vence o hint.
+      expect(
+        await monitor.sessionOwningProcess([120, 110, 100], hint: 't2'),
+        't1',
+      );
+      // Env herdado de t2 por um processo fora da árvore dela (Cursor aberto
+      // do terminal): recusado.
+      expect(await monitor.sessionOwningProcess([999, 1], hint: 't2'), isNull);
+      // Aba remota: o hint é tudo que há.
+      expect(await monitor.sessionOwningProcess([999, 1], hint: 'r1'), 'r1');
+      expect(await monitor.sessionOwningProcess([999, 1]), isNull);
+      expect(await monitor.sessionOwningProcess(const []), isNull);
+      monitor.dispose();
+    });
+  });
 }
 
 class _GatedProcessTreeProvider implements ProcessTreeProvider {

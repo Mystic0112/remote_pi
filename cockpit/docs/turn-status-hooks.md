@@ -177,7 +177,34 @@ junto com a instalação: o usuário não precisa aprovar nada na mão. É o mes
 grau de confiança que já assumimos ao escrever no `settings.json` do Claude —
 instalamos o nosso helper, e só ele. O bloco fica entre delimitadores
 (`# >>> cockpit hooks` … `# <<< cockpit hooks`) e é regerado a cada boot;
-o resto do `config.toml` nunca é tocado.
+o resto do `config.toml` nunca é tocado — fora a tabela abaixo.
+
+### Servidor MCP `cockpit` (o Codex não alcança a CLI de shell)
+
+O sandbox do Codex tira as envs `COCKPIT_*` dos comandos e bloqueia o socket
+do app (`could not connect to app: Operation not permitted`), então
+`cockpit msg`/`peers` não funcionam de dentro dele. Servidor MCP roda **fora**
+do sandbox: no mesmo passe do trust, o instalador garante, antes do bloco,
+
+```toml
+[mcp_servers.cockpit]
+command = "/home/u/.cockpit/bin/cockpit"   # bin-debug no flavor de dev
+args = ["mcp", "--agent", "codex-desktop"]
+env_vars = ["COCKPIT_TAB_ID", "COCKPIT_STATUS_SOCK", "COCKPIT_STATUS_PORT", "COCKPIT_STATUS_TOKEN"]
+```
+
+É a **mesma** entrada que o dialog de apps desktop escreve pro app do Codex
+(que divide este config), então ninguém duplica nada. O `cockpit mcp` decide
+quem é ao subir (`mcp-whoami`): o app procura o pid dele na árvore de processos
+das abas (a mesma leitura do detector de harness); achou = age como aquela aba
+(`send` = `cockpit msg`, `peers`, `list_agents`, e `wait_messages` devolve o que
+chegou pra aba desde a última chamada — a entrega continua sendo digitada no
+PTY). Não achou = nó externo `ext:codex-desktop`. O Codex (0.150+) limpa o env
+dos servidores MCP; `env_vars` repassa as nossas. O `COCKPIT_TAB_ID` herdado só
+vale onde a árvore da aba não é visível (WSL, host remoto): env herdado não
+prova parentesco. Escreve só se algo mudou; antes da primeira escrita guarda
+`config.toml.cockpit-bak` (0600). Tabela `cockpit` definida de outro jeito
+(chave pontilhada) não é tocada.
 
 Referência no fonte do Codex: `codex-rs/hooks/src/engine/discovery.rs`
 (`hook_hash`, `hook_key`) e `codex-rs/config/src/fingerprint.rs`
