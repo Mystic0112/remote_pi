@@ -54,6 +54,8 @@ fn main() {
         "hook" => hook::run(args),
         "send" => commands::send(args),
         "send-key" | "send-keys" => commands::send_key(args),
+        "msg" => commands::msg(args),
+        "peers" => commands::list("peers", args),
         "open" => commands::open(args),
         // Mantém o comando de wire 'list-panes' (protocolo estável); só o nome
         // do verbo mudou na superfície.

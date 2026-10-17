@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:cockpit/app/cockpit/ui/actions/remote_workspace_actions.dart';
 import 'package:cockpit/app/cockpit/ui/actions/tab_actions.dart';
 import 'package:cockpit/app/cockpit/ui/actions/workspace_actions.dart';
+import 'package:cockpit/app/cockpit/ui/session/terminal_session.dart';
 import 'package:cockpit/app/cockpit/ui/actions/worktree_actions.dart';
 import 'package:cockpit/app/core/app_intents.dart';
 import 'package:cockpit/app/cockpit/domain/entities/project.dart';
@@ -780,6 +781,9 @@ class _CockpitPageState extends State<CockpitPage> {
                   // (systemTerminal) não. `activeHasFileTree` cobre os dois —
                   // `!isPathless` desabilitava indevidamente o remoto (path='').
                   filesEnabled: shell.hasFileTree,
+                  onVisualizeAgents: shell.title == null
+                      ? null
+                      : _vm.openAgentGraph,
                 ),
                 // Host remoto fora do ar: faixa com o estado + botão de
                 // reconectar. Não ocupa espaço em workspace local.
@@ -1298,6 +1302,16 @@ class _TreePanel extends StatelessWidget {
           selectedPath: vm.selectedFileInTree,
           listChildren: vm.listChildren,
           gitStatusOf: vm.gitStatusForPath,
+          agentFiles: vm.agentFiles,
+          agentColorOf: vm.agentGraph.colorOf,
+          agentTabs: () => [
+            for (final s in vm.allSessions)
+              if (s is TerminalSession &&
+                  s.projectId == vm.selectedProjectId &&
+                  (s.activeHarness != null ||
+                      vm.agentFiles.touchedBy(s.id).isNotEmpty))
+                s,
+          ],
           onOpenFile: (path) {
             vm.openFile(path, isPreview: false);
             onDismiss(); // fecha o drawer no mobile

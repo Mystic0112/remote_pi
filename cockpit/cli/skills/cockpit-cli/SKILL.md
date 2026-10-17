@@ -22,6 +22,8 @@ PATH). `ck` is the same binary under a shorter name.
 |---|---|
 | `send [--tab-id] [--enter] <text>` | type text; `--enter` submits |
 | `send-key [--tab-id] <Key>...` | `Enter`, `Tab`, `Escape`, arrows, `C-c`... |
+| `msg --to <label\|id> <text>` | message another agent's tab (signed, submitted) |
+| `peers [--json]` | agents the human connected to your tab in the Agents graph |
 | `new-tab [--cwd] [--title] [--split h\|v]` | open a terminal tab, prints its id |
 | `close-tab [<label\|id>]` | close a tab (**no target = your own tab**) |
 | `open <file>` / `cockpit <file>` | open a file in the app's viewer |
@@ -97,6 +99,22 @@ Read a task run's output (dev server, build, test — the Task Run feature):
 cockpit list-tasks                        # ids: ● = running, [output] = readable
 cockpit read-task npm:dev --lines 80      # tail of the "npm:dev" task output
 ```
+
+Talk to another agent (signed with your tab; the app presses Enter for you):
+
+```sh
+cockpit list-tabs --json                  # `harness`: claudeCode, codex, antigravity… or null
+cockpit msg --to Reviewer "diff ready on feat/x, please review"
+# Reviewer receives: [from: <your label> · <your harness>] diff ready on …
+cockpit peers                             # who you were connected to (Agents graph)
+```
+
+A line `[from: cockpit] You are now connected to <name> …` means the human
+linked you to that agent in the Agents graph: talk to it with the `msg`
+command the line gives.
+If the intro says you are the **maestro**, you coordinate every agent on the
+canvas: delegate with `cockpit msg --to <label>` and check `cockpit peers`
+(`maestro: true` marks the maestro in the other agents' peers).
 
 Typical loop — dispatch work to a tab, wait, then read the result:
 

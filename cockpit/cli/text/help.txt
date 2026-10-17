@@ -10,6 +10,10 @@ are legacy aliases of `list-tabs`/`read-tab`.
 USAGE:
   cockpit send      [--tab-id <id>] [--enter] <text>   type text (--enter submits)
   cockpit send-key  [--tab-id <id>] <Key>...   press named key(s)
+  cockpit msg --to <label|tab-id> <text>       message another agent's tab
+                                               (typed + Enter, signed with your tab)
+  cockpit peers     [--json]                   agents linked to your tab in the
+                                               Agents graph (id, label, harness)
   cockpit open      [--tab-id <id>] <file>     open the file in the app's viewer
   cockpit <file>                               shortcut for `open` (e.g. cockpit .zprofile)
   cockpit read-tab  [<label|tab-id>]           read a tab's rendered output (alias: read-pane)
@@ -50,7 +54,9 @@ USAGE:
                                                (--append keeps the open tabs)
   cockpit note <add|list> <dir.notebook> ...   write/list notes in a notebook
                                                folder (see `cockpit note --help`)
-  cockpit install-skill   [--force]            install the Claude Code skill
+  cockpit install-skill   [--agent <a>] [--force]
+                                               install the agent skills (claude,
+                                               codex, pi, antigravity)
   cockpit --help | --version
 
 READ (read-tab / read-task):
@@ -93,6 +99,14 @@ NOTEBOOKS (note):
     cockpit note add notes.notebook --title "Túnel SSH" --tag relay --body -
     cockpit note list notes.notebook
   Full reference: `cockpit note --help`.
+
+MSG:
+  cockpit msg --to Reviewer "diff ready in feat/x, please review"
+  The target receives `[from: <your label or title> · <your harness>] <text>`
+  and Enter. Sender = $COCKPIT_TAB_ID (required). `list-tabs --json` shows each
+  tab's detected `harness` (claudeCode, codex, antigravity, …) or null.
+  `cockpit peers` lists the agents your tab was connected to in the Agents
+  graph (topbar → Visualize agents): message those with `msg --to <label|id>`.
 
 IDS:
   Workspace ids are opaque UUIDs — use `workspacePath` (list-tabs) / `path`

@@ -18,12 +18,17 @@ void main() {
       expect(AgentHarness.fromWire('codex'), AgentHarness.codex);
     });
 
-    test('ausente ou desconhecido cai em claude (compat)', () {
+    test('ausente cai em claude (compat)', () {
       // Layout salvo antes desta distinção, ou helper antigo sem `--harness`:
       // nos dois casos só o Claude tinha hooks instalados.
       expect(AgentHarness.fromWire(null), AgentHarness.claude);
       expect(AgentHarness.fromWire(''), AgentHarness.claude);
-      expect(AgentHarness.fromWire('gemini'), AgentHarness.claude);
+    });
+
+    test('desconhecido é null, nunca claude', () {
+      // Regressão: virava claude e o restore digitava `claude --resume <id>`
+      // com o id de outro harness.
+      expect(AgentHarness.fromWire('gemini'), isNull);
     });
   });
 }

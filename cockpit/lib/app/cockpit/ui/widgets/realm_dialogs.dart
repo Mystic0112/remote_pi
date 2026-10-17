@@ -7,13 +7,16 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 /// Dialog de nome de realm (criar/renomear). Valida ao vivo: não-vazio e único
 /// entre [takenNames] (case-insensitive; o nome atual em rename fica de fora).
-/// Devolve o nome confirmado (trim) ou `null` se cancelar.
+/// Devolve o nome confirmado (trim) ou `null` se cancelar. [placeholder] e
+/// [duplicateMessage] trocam os textos de realm (reuso: renomear agente).
 Future<String?> showRealmNameDialog(
   BuildContext context, {
   required String title,
   required String confirmLabel,
   required Set<String> takenNames,
   String? initial,
+  String? placeholder,
+  String? duplicateMessage,
 }) {
   return showDialog<String>(
     context: context,
@@ -23,6 +26,8 @@ Future<String?> showRealmNameDialog(
       confirmLabel: confirmLabel,
       takenNames: takenNames.map((n) => n.toLowerCase()).toSet(),
       initial: initial,
+      placeholder: placeholder,
+      duplicateMessage: duplicateMessage,
     ),
   );
 }
@@ -33,12 +38,16 @@ class _RealmNameDialog extends StatefulWidget {
     required this.confirmLabel,
     required this.takenNames,
     this.initial,
+    this.placeholder,
+    this.duplicateMessage,
   });
 
   final String title;
   final String confirmLabel;
   final Set<String> takenNames;
   final String? initial;
+  final String? placeholder;
+  final String? duplicateMessage;
 
   @override
   State<_RealmNameDialog> createState() => _RealmNameDialogState();
@@ -82,14 +91,18 @@ class _RealmNameDialogState extends State<_RealmNameDialog> {
             TextField(
               controller: _name,
               autofocus: true,
-              placeholder: Text(context.t.cockpit.realmDialogs.namePlaceholder),
+              placeholder: Text(
+                widget.placeholder ??
+                    context.t.cockpit.realmDialogs.namePlaceholder,
+              ),
               onChanged: (_) => setState(() {}),
               onSubmitted: (_) => _submit(),
             ),
             if (_trimmed.isNotEmpty && !_valid) ...[
               const SizedBox(height: 8),
               Text(
-                context.t.cockpit.realmDialogs.duplicateName,
+                widget.duplicateMessage ??
+                    context.t.cockpit.realmDialogs.duplicateName,
                 style: context.typo.label.copyWith(color: colors.error),
               ),
             ],

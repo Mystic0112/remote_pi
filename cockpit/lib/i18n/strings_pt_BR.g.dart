@@ -139,6 +139,7 @@ class _Translations$cockpit$pt_BR extends Translations$cockpit$en {
 	@override late final _Translations$cockpit$layoutPreview$pt_BR layoutPreview = _Translations$cockpit$layoutPreview$pt_BR._(_root);
 	@override late final _Translations$cockpit$telemetry$pt_BR telemetry = _Translations$cockpit$telemetry$pt_BR._(_root);
 	@override late final _Translations$cockpit$panelView$pt_BR panelView = _Translations$cockpit$panelView$pt_BR._(_root);
+	@override late final _Translations$cockpit$agentGraph$pt_BR agentGraph = _Translations$cockpit$agentGraph$pt_BR._(_root);
 }
 
 // Path: settings
@@ -552,6 +553,13 @@ class _Translations$cockpit$fileTreePanel$pt_BR extends Translations$cockpit$fil
 	@override String get newFile => 'Novo arquivo';
 	@override String get newFolder => 'Nova pasta';
 	@override String get refreshTooltip => 'Atualizar';
+	@override String get agentFilterTooltip => 'Filtrar por agente';
+	@override String get allAgents => 'Todos os agentes';
+	@override String get trackingUnavailable => 'rastreio indisponível';
+	@override String editedBy({required Object label, required Object time}) => 'Editado por ${label} · ${time}';
+	@override String get inferredSuffix => '(inferido)';
+	@override String get noTouchedFiles => 'Nenhum arquivo tocado por este agente ainda';
+	@override String get concurrentAgentEdits => 'Editado por 2+ agentes nos últimos 10 minutos';
 	@override String get collapseAll => 'Recolher todas as pastas';
 	@override String get sectionSourceControl => 'CONTROLE DE VERSÃO';
 	@override String get viewAsList => 'Ver como lista';
@@ -1013,6 +1021,7 @@ class _Translations$cockpit$topbar$pt_BR extends Translations$cockpit$topbar$en 
 	@override String get toggleFiles => 'Mostrar/ocultar arquivos';
 	@override String get filesUnavailable => 'Arquivos indisponíveis no Cockpit';
 	@override String get hideKeyboard => 'Baixar teclado';
+	@override String get visualizeAgents => 'Visualizar agentes';
 }
 
 // Path: cockpit.tasks
@@ -1307,6 +1316,58 @@ class _Translations$cockpit$panelView$pt_BR extends Translations$cockpit$panelVi
 	@override String get unavailable => 'Painéis precisam da web view embutida, que ainda não existe no Linux.';
 	@override String get openInBrowser => 'Abrir no navegador';
 	@override String get openAsHtml => 'Abrir como HTML';
+}
+
+// Path: cockpit.agentGraph
+class _Translations$cockpit$agentGraph$pt_BR extends Translations$cockpit$agentGraph$en {
+	_Translations$cockpit$agentGraph$pt_BR._(TranslationsPtBr root) : this._root = root, super.internal(root);
+
+	final TranslationsPtBr _root; // ignore: unused_field
+
+	// Translations
+	@override String get tabTitle => 'Agentes';
+	@override String get newAgent => 'Novo agente';
+	@override String get emptyTitle => 'Nenhum agente neste workspace';
+	@override String get emptyHint => 'Inicie um agente num terminal ou crie um aqui. Arraste da porta de um agente até outro para conectá-los.';
+	@override String get statusWorking => 'Trabalhando';
+	@override String get statusWaiting => 'Aguardando';
+	@override String get statusIdle => 'Ocioso';
+	@override String messageCount({required Object n}) => 'Mensagens: ${n}';
+	@override String lastMessage({required Object preview}) => 'Última: ${preview}';
+	@override String get linked => 'Conectado';
+	@override String get removeLinkHint => 'Clique direito para remover a conexão';
+	@override String get removeLink => 'Remover conexão';
+	@override String get connectHint => 'Arraste até outro agente para conectar';
+	@override String get quickStart => 'Início rápido';
+	@override String get shell => 'Shell';
+	@override String get tabDetails => 'Detalhes';
+	@override String get tabAppearance => 'Aparência';
+	@override String get tabAgent => 'Agente';
+	@override String get name => 'Nome do terminal';
+	@override String get namePlaceholder => 'ex.: Revisor';
+	@override String get nameTaken => 'Outra aba já usa este nome. Os nomes precisam ser únicos para o `cockpit msg --to` achar a aba.';
+	@override String get command => 'Comando';
+	@override String get commandPlaceholder => 'ex.: claude --model opus (vazio = shell)';
+	@override String get cwd => 'Diretório de trabalho';
+	@override String get browse => 'Procurar…';
+	@override String get cwdMissing => 'Esta pasta não existe.';
+	@override String get monitor => 'Monitorar atividade';
+	@override String get monitorHint => 'Badge, som e notificação quando um turno termina.';
+	@override String get maestro => 'Maestro';
+	@override String get maestroTooltip => 'Promove este agente a maestro: ele fica conectado a todos os agentes do canvas e os coordena.';
+	@override String maestroReplaces({required Object name}) => '${name} é o maestro atual e deixará de ser.';
+	@override String get color => 'Cor';
+	@override String get colorAuto => 'Automática';
+	@override String get role => 'Papel / instruções';
+	@override String get rolePlaceholder => 'Enviado como primeira mensagem assim que o agente estiver pronto.';
+	@override String get task => 'Tarefa inicial';
+	@override String get taskPlaceholder => 'Enviada logo depois do papel.';
+	@override String get focus => 'Focar';
+	@override String get rename => 'Renomear';
+	@override String get renameTitle => 'Renomear agente';
+	@override String get makeMaestro => 'Tornar maestro';
+	@override String get removeMaestro => 'Remover maestro';
+	@override String get closeTab => 'Fechar aba';
 }
 
 // Path: settings.language
@@ -2148,6 +2209,13 @@ extension on TranslationsPtBr {
 			'cockpit.fileTreePanel.newFile' => 'Novo arquivo',
 			'cockpit.fileTreePanel.newFolder' => 'Nova pasta',
 			'cockpit.fileTreePanel.refreshTooltip' => 'Atualizar',
+			'cockpit.fileTreePanel.agentFilterTooltip' => 'Filtrar por agente',
+			'cockpit.fileTreePanel.allAgents' => 'Todos os agentes',
+			'cockpit.fileTreePanel.trackingUnavailable' => 'rastreio indisponível',
+			'cockpit.fileTreePanel.editedBy' => ({required Object label, required Object time}) => 'Editado por ${label} · ${time}',
+			'cockpit.fileTreePanel.inferredSuffix' => '(inferido)',
+			'cockpit.fileTreePanel.noTouchedFiles' => 'Nenhum arquivo tocado por este agente ainda',
+			'cockpit.fileTreePanel.concurrentAgentEdits' => 'Editado por 2+ agentes nos últimos 10 minutos',
 			'cockpit.fileTreePanel.collapseAll' => 'Recolher todas as pastas',
 			'cockpit.fileTreePanel.sectionSourceControl' => 'CONTROLE DE VERSÃO',
 			'cockpit.fileTreePanel.viewAsList' => 'Ver como lista',
@@ -2406,6 +2474,8 @@ extension on TranslationsPtBr {
 			'cockpit.dbConnectionDialog.choosePrivateKeyDialogTitle' => 'Escolher chave privada SSH',
 			'cockpit.dbConnectionDialog.keyPassphrase' => 'Senha da chave',
 			'cockpit.dbConnectionDialog.savePassphrase' => 'Salvar senha da chave',
+			_ => null,
+		} ?? switch (path) {
 			'cockpit.dbConnectionDialog.passwordOnHost' => 'A senha fica salva no host, não nesta máquina.',
 			'cockpit.sshPrompts.unknownSshHostTitle' => 'Host SSH desconhecido',
 			'cockpit.sshPrompts.neverConnected' => ({required Object endpoint}) => 'O Cockpit nunca se conectou a ${endpoint} antes.',
@@ -2413,8 +2483,6 @@ extension on TranslationsPtBr {
 			'cockpit.sshPrompts.trust' => 'Confiar',
 			'cockpit.sshPrompts.sshKeyPassphraseTitle' => 'Senha da chave SSH',
 			'cockpit.sshPrompts.unlockMessage' => ({required Object keyPath, required Object connectionName}) => 'Desbloqueie ${keyPath} para conectar "${connectionName}".',
-			_ => null,
-		} ?? switch (path) {
 			'cockpit.sshPrompts.keptInMemoryHint' => 'Mantida em memória até o Cockpit fechar. Para permitir que agentes usem esta conexão, ative "Salvar senha da chave" na conexão.',
 			'cockpit.sshPrompts.unlock' => 'Desbloquear',
 			'cockpit.projectsRail.workspaces' => 'Workspaces',
@@ -2465,6 +2533,7 @@ extension on TranslationsPtBr {
 			'cockpit.topbar.toggleFiles' => 'Mostrar/ocultar arquivos',
 			'cockpit.topbar.filesUnavailable' => 'Arquivos indisponíveis no Cockpit',
 			'cockpit.topbar.hideKeyboard' => 'Baixar teclado',
+			'cockpit.topbar.visualizeAgents' => 'Visualizar agentes',
 			'cockpit.tasks.hotReload' => 'Hot reload',
 			'cockpit.tasks.hotRestart' => 'Hot restart',
 			'cockpit.tasks.toggleDebugPaint' => 'Alternar debug paint',
@@ -2676,6 +2745,49 @@ extension on TranslationsPtBr {
 			'cockpit.panelView.unavailable' => 'Painéis precisam da web view embutida, que ainda não existe no Linux.',
 			'cockpit.panelView.openInBrowser' => 'Abrir no navegador',
 			'cockpit.panelView.openAsHtml' => 'Abrir como HTML',
+			'cockpit.agentGraph.tabTitle' => 'Agentes',
+			'cockpit.agentGraph.newAgent' => 'Novo agente',
+			'cockpit.agentGraph.emptyTitle' => 'Nenhum agente neste workspace',
+			'cockpit.agentGraph.emptyHint' => 'Inicie um agente num terminal ou crie um aqui. Arraste da porta de um agente até outro para conectá-los.',
+			'cockpit.agentGraph.statusWorking' => 'Trabalhando',
+			'cockpit.agentGraph.statusWaiting' => 'Aguardando',
+			'cockpit.agentGraph.statusIdle' => 'Ocioso',
+			'cockpit.agentGraph.messageCount' => ({required Object n}) => 'Mensagens: ${n}',
+			'cockpit.agentGraph.lastMessage' => ({required Object preview}) => 'Última: ${preview}',
+			'cockpit.agentGraph.linked' => 'Conectado',
+			'cockpit.agentGraph.removeLinkHint' => 'Clique direito para remover a conexão',
+			'cockpit.agentGraph.removeLink' => 'Remover conexão',
+			'cockpit.agentGraph.connectHint' => 'Arraste até outro agente para conectar',
+			'cockpit.agentGraph.quickStart' => 'Início rápido',
+			'cockpit.agentGraph.shell' => 'Shell',
+			'cockpit.agentGraph.tabDetails' => 'Detalhes',
+			'cockpit.agentGraph.tabAppearance' => 'Aparência',
+			'cockpit.agentGraph.tabAgent' => 'Agente',
+			'cockpit.agentGraph.name' => 'Nome do terminal',
+			'cockpit.agentGraph.namePlaceholder' => 'ex.: Revisor',
+			'cockpit.agentGraph.nameTaken' => 'Outra aba já usa este nome. Os nomes precisam ser únicos para o `cockpit msg --to` achar a aba.',
+			'cockpit.agentGraph.command' => 'Comando',
+			'cockpit.agentGraph.commandPlaceholder' => 'ex.: claude --model opus (vazio = shell)',
+			'cockpit.agentGraph.cwd' => 'Diretório de trabalho',
+			'cockpit.agentGraph.browse' => 'Procurar…',
+			'cockpit.agentGraph.cwdMissing' => 'Esta pasta não existe.',
+			'cockpit.agentGraph.monitor' => 'Monitorar atividade',
+			'cockpit.agentGraph.monitorHint' => 'Badge, som e notificação quando um turno termina.',
+			'cockpit.agentGraph.maestro' => 'Maestro',
+			'cockpit.agentGraph.maestroTooltip' => 'Promove este agente a maestro: ele fica conectado a todos os agentes do canvas e os coordena.',
+			'cockpit.agentGraph.maestroReplaces' => ({required Object name}) => '${name} é o maestro atual e deixará de ser.',
+			'cockpit.agentGraph.color' => 'Cor',
+			'cockpit.agentGraph.colorAuto' => 'Automática',
+			'cockpit.agentGraph.role' => 'Papel / instruções',
+			'cockpit.agentGraph.rolePlaceholder' => 'Enviado como primeira mensagem assim que o agente estiver pronto.',
+			'cockpit.agentGraph.task' => 'Tarefa inicial',
+			'cockpit.agentGraph.taskPlaceholder' => 'Enviada logo depois do papel.',
+			'cockpit.agentGraph.focus' => 'Focar',
+			'cockpit.agentGraph.rename' => 'Renomear',
+			'cockpit.agentGraph.renameTitle' => 'Renomear agente',
+			'cockpit.agentGraph.makeMaestro' => 'Tornar maestro',
+			'cockpit.agentGraph.removeMaestro' => 'Remover maestro',
+			'cockpit.agentGraph.closeTab' => 'Fechar aba',
 			'settings.language.title' => 'Idioma',
 			'settings.language.system' => 'Sistema',
 			'settings.language.english' => 'Inglês',
@@ -2876,6 +2988,8 @@ extension on TranslationsPtBr {
 			'settings.remoteHosts.deviceKeyCopied' => 'Chave pública copiada',
 			'settings.remoteHosts.statusConnected' => 'Conectado',
 			'settings.remoteHosts.statusConnecting' => 'Conectando…',
+			_ => null,
+		} ?? switch (path) {
 			'settings.remoteHosts.statusReconnecting' => 'Reconectando…',
 			'settings.remoteHosts.statusOffline' => 'Offline',
 			'settings.remoteHosts.statusIdle' => 'Não conectado',
@@ -2927,8 +3041,6 @@ extension on TranslationsPtBr {
 			'theme.error.missingField' => ({required Object field}) => 'Falta o campo obrigatório "${field}".',
 			'theme.error.badColor' => ({required Object value, required Object field}) => '"${value}" em "${field}" não é uma cor. Use #RGB, #RRGGBB ou #RRGGBBAA.',
 			'theme.error.unknownBase' => ({required Object value}) => 'Tema base "${value}" desconhecido em "extends".',
-			_ => null,
-		} ?? switch (path) {
 			'theme.error.noVariants' => 'O tema não declara nenhum variant. Adicione "dark", "light" ou os dois em "variants".',
 			_ => null,
 		};

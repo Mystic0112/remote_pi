@@ -9,6 +9,7 @@ class ClaudeStatusUpdate {
     this.sessionId,
     this.transcriptPath,
     this.harness,
+    this.files = const <String>[],
   });
 
   /// Id da aba (vem do env `COCKPIT_PANE_ID` injetado na PTV — roteamento).
@@ -33,6 +34,10 @@ class ClaudeStatusUpdate {
   /// instalador grava no comando do hook; `null` em helpers antigos (que só
   /// existiam para o Claude — ver [AgentHarness.fromWire]).
   final String? harness;
+
+  /// Caminhos absolutos que um `PostToolUse` de edição tocou (`Edit`/`Write`
+  /// do Claude, `apply_patch` do Codex). Vazio nos demais eventos.
+  final List<String> files;
 }
 
 /// Harness que roda numa aba de terminal. O Cockpit precisa distinguir para
@@ -64,12 +69,17 @@ enum AgentHarness {
           : 'pi --session $sessionId',
   };
 
-  /// Converte o nome do wire. Desconhecido ou ausente cai em [claude]: layouts
-  /// e helpers anteriores a esta distinção só podiam ser do Claude.
-  static AgentHarness fromWire(String? wire) => AgentHarness.values.firstWhere(
-    (h) => h.wire == wire,
-    orElse: () => AgentHarness.claude,
-  );
+  /// Converte o nome do wire. **Ausente** cai em [claude]: layouts e helpers
+  /// anteriores a esta distinção só podiam ser do Claude. **Desconhecido** é
+  /// `null` — virar Claude montaria `claude --resume <id>` com o id de outro
+  /// harness.
+  static AgentHarness? fromWire(String? wire) {
+    if (wire == null || wire.isEmpty) return AgentHarness.claude;
+    for (final h in AgentHarness.values) {
+      if (h.wire == wire) return h;
+    }
+    return null;
+  }
 }
 
 /// Comando enviado pela **CLI interna** `cockpit` (binário em `~/.cockpit/bin`)

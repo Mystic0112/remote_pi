@@ -198,6 +198,7 @@ class TerminalStatusServerImpl implements TerminalStatusServer {
       final tx = (decoded['tx'] ?? '').toString();
       final ev = (decoded['ev'] ?? '').toString();
       final hn = (decoded['hn'] ?? '').toString();
+      final files = decoded['files'];
       _onUpdate?.call(
         ClaudeStatusUpdate(
           paneId: paneId,
@@ -206,6 +207,9 @@ class TerminalStatusServerImpl implements TerminalStatusServer {
           sessionId: sid.isEmpty ? null : sid,
           transcriptPath: tx.isEmpty ? null : tx,
           harness: hn.isEmpty ? null : hn,
+          files: files is List
+              ? [for (final f in files) f.toString()]
+              : const <String>[],
         ),
       );
       return (null, null);

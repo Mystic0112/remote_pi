@@ -5,6 +5,13 @@ precisa de uma ação do usuário (spinner, badge, chime, notificação do SO).
 
 Suportados hoje: **Claude Code** e **Codex CLI** (0.147+).
 
+Demais harnesses detectados na aba (Antigravity, Cursor, Copilot, OpenCode, Pi)
+não têm hook: o status vem de uma heurística de saída do PTY em
+`TerminalSession` (`working` enquanto imprime, `idle` após
+`outputSilenceIdle` ≈ 3s de silêncio; eco de digitação/resize ignorado; só um
+turno que passou do 1º tick notifica). TUI que anima parada dá falso
+`working` — o upgrade é hook nativo por harness (ex.: issue #214, OpenCode).
+
 ## Como funciona
 
 1. No boot, `bootstrapper.dart` roda os `HookInstaller` de cada harness. Eles
@@ -57,6 +64,33 @@ Duas assimetrias que importam:
 O envelope é praticamente o mesmo nos dois (`hook_event_name`, `session_id`,
 `transcript_path`, `cwd`, `tool_name`, `tool_input`, `permission_mode`). O Codex
 manda um `turn_id` a mais, que o helper repassa como `tid`.
+
+## Quem mexeu no quê (arquivos por aba)
+
+O mesmo hook carrega os arquivos que o agente editou. No `PostToolUse`,
+`touched_files` (em `cli/src/hook.rs`) extrai os caminhos e manda no campo
+opcional `files` (absolutos; relativo resolve contra o `cwd` do envelope):
+
+| Harness | Ferramenta | De onde vem o caminho |
+|---|---|---|
+| Claude Code | `Edit` / `Write` / `MultiEdit` | `tool_input.file_path` |
+| Claude Code | `NotebookEdit` | `tool_input.notebook_path` |
+| Codex CLI | `apply_patch` (ou o patch como argv de shell) | cabeçalhos `*** Add/Update/Delete File:` e `*** Move to:` do patch, achado em qualquer string do `tool_input` |
+
+Formato desconhecido = sem `files` (o hook nunca falha por isso). O app grava
+em `AgentFileActivity` (`ui/viewmodels/agent_file_activity.dart`: aba →
+caminho → quando, `inferred`), em memória, limpo ao fechar a aba.
+
+Abas **sem hook** (heurística de saída acima) usam o git: no início de um turno
+inferido o app guarda o status da root onde a aba está; no fim (turno
+sustentado) re-lê o git e atribui à aba os sujos com mtime ≥ início do turno e
+os removidos novos — sempre como `inferred`. Arquivos que outra aba reportou
+por hook no mesmo intervalo ficam com ela. Teto: arquivo fora do git ou
+ignorado não aparece, dois agentes sem hook no mesmo repo são ambíguos, e
+workspace remoto fica de fora. Upgrade: hook nativo por harness.
+
+Na UI, o painel Files ganha o filtro por agente (cor estável por aba via
+`agentColorFor` em `core/ui/themes/agent_colors.dart`).
 
 ## Retomar a sessão (quem é o dono do session-id)
 

@@ -24,6 +24,7 @@ class CockpitTopbar extends StatelessWidget {
     required this.onToggleRail,
     required this.onToggleTree,
     this.filesEnabled = true,
+    this.onVisualizeAgents,
   });
 
   final String projectName;
@@ -35,6 +36,10 @@ class CockpitTopbar extends StatelessWidget {
   /// Habilita o botão de árvore de arquivos. `false` no workspace de sistema
   /// "Cockpit" (sem pasta → sem árvore): o botão fica visível porém inerte.
   final bool filesEnabled;
+
+  /// Abre/foca o grafo de agentes do workspace. `null` = botão oculto (sem
+  /// workspace selecionado).
+  final VoidCallback? onVisualizeAgents;
 
   @override
   Widget build(BuildContext context) {
@@ -71,6 +76,14 @@ class CockpitTopbar extends StatelessWidget {
           style: context.typo.title.copyWith(fontSize: 14, color: colors.text),
         ),
         const Spacer(),
+        if (onVisualizeAgents case final onTap?) ...[
+          _IconBtn(
+            icon: Icons.hub_outlined,
+            tooltip: context.t.cockpit.topbar.visualizeAgents,
+            onTap: onTap,
+          ),
+          const SizedBox(width: 4),
+        ],
         _IconBtn(
           icon: Icons.view_sidebar_outlined,
           tooltip: filesEnabled

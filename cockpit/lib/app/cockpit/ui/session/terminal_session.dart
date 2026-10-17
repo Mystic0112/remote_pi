@@ -127,7 +127,10 @@ class TerminalSession extends PaneItem {
         .map(_redactor.feed)
         .where((s) => s.isNotEmpty)
         .listen(
-          _coalescer.add,
+          (chunk) {
+            _onPtyOutput();
+            _coalescer.add(chunk);
+          },
           onDone: () {
             final tail = _redactor.flush();
             if (tail.isNotEmpty) _coalescer.add(tail);
@@ -139,6 +142,7 @@ class TerminalSession extends PaneItem {
         );
     terminal.onOutput = (data) {
       final text = utf8.decode(data, allowMalformed: true);
+      _lastLocalInputAt = DateTime.now();
       _maybeInterrupt(text);
       _gateway.write(data);
       // Enter (e equivalentes) = comando submetido → processo pode nascer já.
@@ -149,6 +153,7 @@ class TerminalSession extends PaneItem {
     terminal.onResize = (columns, rows) {
       _viewportColumns = columns;
       _viewportRows = rows;
+      _lastLocalInputAt = DateTime.now(); // o redesenho do resize não é turno
       if (!_firstViewportResize.isCompleted) _firstViewportResize.complete();
       _gateway.resize(rows, columns);
     };
@@ -178,6 +183,7 @@ class TerminalSession extends PaneItem {
       onHarnessChanged: (newHarness) {
         if (_activeHarness != newHarness) {
           _activeHarness = newHarness;
+          if (!_usesOutputHeuristic) _stopOutputHeuristic();
           notifyListeners();
         }
       },
@@ -188,6 +194,11 @@ class TerminalSession extends PaneItem {
   /// de aprovação). A VM usa pra notificar o workspace — espelha o `onTurnEnd`
   /// do [AgentSession].
   VoidCallback? onTurnFinished;
+
+  /// Início e fim (só turno sustentado) de um turno inferido pela saída do PTY
+  /// — abas sem hook. A VM usa pra atribuir os arquivos mexidos no turno.
+  VoidCallback? onOutputTurnStarted;
+  VoidCallback? onOutputTurnEnded;
 
   /// Disparado quando o shell muda de diretório (capturado por OSC 7). A VM usa
   /// pra persistir o cwd vivo no layout — assim o restore sobe o shell onde o
@@ -302,11 +313,11 @@ class TerminalSession extends PaneItem {
     AgentHarness? harness,
   }) {
     // O harness anda junto do id: trocar um sem o outro montaria um comando de
-    // resume com o id do harness errado.
+    // resume com o id do harness errado (harness desconhecido = não guarda).
     if (sessionId != null && sessionId.isNotEmpty && harness != null) {
       agentHarness = harness;
+      claudeSessionId = sessionId;
     }
-    if (sessionId != null && sessionId.isNotEmpty) claudeSessionId = sessionId;
     if (transcriptPath != null && transcriptPath.isNotEmpty) {
       this.transcriptPath = transcriptPath;
     }
@@ -360,6 +371,91 @@ class TerminalSession extends PaneItem {
         if (_status == next) onTurnFinished?.call();
       });
     }
+  }
+
+  /// Harnesses com hook de status instalado (ver `bootstrapper.dart`): o
+  /// turno vem do hook, nunca da heurística de saída.
+  static const Set<HarnessKind> _hookDrivenHarnesses = {
+    HarnessKind.claudeCode,
+    HarnessKind.codex,
+  };
+
+  /// Silêncio do PTY que encerra um turno inferido pela saída (o idle chega
+  /// entre 1× e 2× isto: o timer só re-arma, nunca é recriado por chunk).
+  // ponytail: heurística de saída — TUI que redesenha/anima parada (spinner,
+  // relógio) acende "working" falso. Upgrade = hook nativo por harness (como a
+  // issue #214 para o OpenCode).
+  static const Duration outputSilenceIdle = Duration(seconds: 3);
+
+  /// Saída logo após digitação/resize é eco/redesenho, não trabalho.
+  static const Duration _localEchoWindow = Duration(milliseconds: 300);
+
+  Timer? _outputIdleTimer;
+  bool _outputSinceTick = false;
+  bool _outputSustained = false;
+  DateTime? _lastLocalInputAt;
+
+  /// `true` se o turno desta aba vem da heurística de saída (harness sem hook).
+  bool get usesOutputHeuristic => _usesOutputHeuristic;
+
+  bool get _usesOutputHeuristic {
+    final h = _activeHarness;
+    return h != null && !_hookDrivenHarnesses.contains(h);
+  }
+
+  /// Status de turno para harness sem hook: saída do PTY = `working`; silêncio
+  /// de [outputSilenceIdle] = `idle`. Abas com hook não passam por aqui.
+  void _onPtyOutput() {
+    if (!_usesOutputHeuristic) return;
+    final input = _lastLocalInputAt;
+    if (input != null && DateTime.now().difference(input) < _localEchoWindow) {
+      return;
+    }
+    if (_outputIdleTimer != null) {
+      _outputSinceTick = true;
+      return;
+    }
+    _outputSinceTick = false;
+    _outputSustained = false;
+    _setStatus(TerminalStatus.working);
+    _outputIdleTimer = Timer(outputSilenceIdle, _onOutputTick);
+    onOutputTurnStarted?.call();
+  }
+
+  void _onOutputTick() {
+    if (_outputSinceTick) {
+      _outputSinceTick = false;
+      _outputSustained = true;
+      _outputIdleTimer = Timer(outputSilenceIdle, _onOutputTick);
+      return;
+    }
+    _outputIdleTimer = null;
+    if (_status != TerminalStatus.working) return;
+    // Só um turno que durou além do 1º tick avisa (badge/som/notificação): um
+    // redesenho isolado da TUI apaga o spinner calado.
+    if (_outputSustained) {
+      _setStatus(TerminalStatus.idle);
+      onOutputTurnEnded?.call();
+    } else {
+      _silentIdle();
+    }
+  }
+
+  /// Desliga a heurística (harness saiu ou trocou por um com hook) sem
+  /// notificar fim de turno.
+  void _stopOutputHeuristic() {
+    final timer = _outputIdleTimer;
+    if (timer == null) return;
+    timer.cancel();
+    _outputIdleTimer = null;
+    if (_status == TerminalStatus.working) _silentIdle();
+  }
+
+  void _silentIdle() {
+    _notifyDebounce?.cancel();
+    _status = TerminalStatus.idle;
+    _lastIdleAt = DateTime.now();
+    notifyListeners();
   }
 
   /// Encurta títulos longos pra caber melhor na aba. Caminhos viram o último
@@ -440,11 +536,17 @@ class TerminalSession extends PaneItem {
 
   /// Insere [text] diretamente no PTY como se o usuário tivesse digitado/colado
   /// (ex.: caminho de arquivo arrastado até o terminal).
-  void insertText(String text) => _gateway.write(utf8.encode(text));
+  void insertText(String text) {
+    _lastLocalInputAt = DateTime.now();
+    _gateway.write(utf8.encode(text));
+  }
 
   /// Envia bytes CRUS ao PTY (sequências de controle: ESC, setas, F-keys,
   /// Ctrl+C...). Usado pela barra de teclas do mobile — plano 60, Wave F.
-  void sendKeys(List<int> bytes) => _gateway.write(bytes);
+  void sendKeys(List<int> bytes) {
+    _lastLocalInputAt = DateTime.now();
+    _gateway.write(bytes);
+  }
 
   /// Copia a seleção do terminal pro clipboard. No-op sem seleção.
   ///
@@ -592,6 +694,7 @@ class TerminalSession extends PaneItem {
     _disposed = true;
     _monitor?.unregisterSession(id);
     _notifyDebounce?.cancel();
+    _outputIdleTimer?.cancel();
     _saveDebounce.dispose();
     _startupTimer?.cancel();
     for (final t in _harnessKickTimers) {

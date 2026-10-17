@@ -110,6 +110,10 @@ import 'package:cockpit/app/cockpit/domain/contracts/terminal_scrollback_store.d
 import 'package:cockpit/app/cockpit/domain/services/terminal_harness_monitor.dart';
 import 'package:cockpit/app/cockpit/ui/session/terminal_session.dart';
 import 'package:cockpit/app/cockpit/ui/states/pane_node.dart';
+import 'package:cockpit/app/cockpit/ui/viewmodels/agent_file_activity.dart';
+import 'package:cockpit/app/cockpit/ui/session/agent_graph_session.dart';
+import 'package:cockpit/app/cockpit/ui/viewmodels/agent_graph_store.dart';
+import 'package:cockpit/app/cockpit/ui/viewmodels/agent_message_log.dart';
 import 'package:cockpit/app/cockpit/ui/viewmodels/cockpit_cli_handler.dart';
 import 'package:cockpit/app/cockpit/ui/viewmodels/telemetry_cli_handler.dart';
 import 'package:cockpit/app/cockpit/domain/contracts/telemetry_ingest.dart';
@@ -712,6 +716,24 @@ class CockpitViewModel extends ChangeNotifier implements DocumentHost {
   /// Todas as sessões abertas (qualquer workspace) — usado pela CLI interna
   /// ([CockpitCliHandler]) pra list-panes/resolução por label.
   Iterable<PaneItem> get allSessions => _sessions.values;
+
+  /// Mensagens entre agentes (`cockpit msg`) por workspace. Listener próprio:
+  /// uma mensagem não reconstrói o shell inteiro.
+  final AgentMessageLog agentMessages = AgentMessageLog();
+
+  /// Arquivos tocados por agente (hook ou heurística de git). Listener próprio,
+  /// como o [agentMessages].
+  final AgentFileActivity agentFiles = AgentFileActivity();
+  late final OutputTurnFileTracker _outputTurnFiles = OutputTurnFileTracker(
+    agentFiles,
+    git,
+  );
+
+  /// Grafo de agentes (posições + links definidos) por workspace; persiste no
+  /// doc de layout ([kAgentGraphKey]).
+  late final AgentGraphStore agentGraph = AgentGraphStore(
+    onWorkspaceChanged: _scheduleSave,
+  );
 
   /// Lookup público de projeto por id (CLI interna e colaboradores).
   Project? projectById(String? id) => _projectById(id);
@@ -1933,6 +1955,19 @@ class CockpitViewModel extends ChangeNotifier implements DocumentHost {
     );
     return session as NotebookSession?;
   }
+
+  /// Abre (ou foca) a aba do grafo de agentes do workspace. Uma por workspace.
+  AgentGraphSession? openAgentGraph({String? projectId}) =>
+      _openBrowserTab(
+            projectId,
+            matches: (s) => s is AgentGraphSession,
+            make: (id, pid, path) => AgentGraphSession(
+              id: id,
+              projectId: pid,
+              workingDirectory: path,
+            ),
+          )
+          as AgentGraphSession?;
 
   /// Texto de um arquivo (local ou host remoto) pra widgets que leem vários
   /// arquivos de uma pasta (caderno). `null` = binário/ilegível.
@@ -5863,7 +5898,17 @@ class CockpitViewModel extends ChangeNotifier implements DocumentHost {
     );
     // claude rodando na aba reporta fim de turno via socket → mesma notificação
     // do agente (badge se não for a aba ativa; OS notification se desfocado).
-    t.onTurnFinished = () => unawaited(notifications.turnFinished(t));
+    // "Monitor activity" desligado no New agent: spinner sim, aviso não.
+    t.onTurnFinished = () {
+      if (agentGraph.isMonitored(t.id)) {
+        unawaited(notifications.turnFinished(t));
+      }
+    };
+    // Aba sem hook: o git diz o que o turno inferido mexeu (só local).
+    if (!_isRemoteWorkspace(projectId)) {
+      t.onOutputTurnStarted = () => _outputTurnFiles.turnStarted(t);
+      t.onOutputTurnEnded = () => unawaited(_outputTurnFiles.turnEnded(t));
+    }
     // cwd vivo (OSC 7) mudou → persiste o layout pra restaurar o shell ali.
     t.onCwdChanged = () => _scheduleSave(projectId);
     // Shell encerrou sozinho (`exit`, Ctrl-D, processo morto) e a preferência
@@ -5997,6 +6042,12 @@ class CockpitViewModel extends ChangeNotifier implements DocumentHost {
         'pane=${u.paneId} ev=${u.event} st=${u.status}',
       );
     }
+    agentFiles.record(
+      tabId: s.id,
+      workspaceId: s.projectId,
+      paths: u.files,
+      inferred: false,
+    );
     final hadSid = s.claudeSessionId;
     s.applyClaudeStatus(
       status: switch (u.status) {
@@ -6130,6 +6181,8 @@ class CockpitViewModel extends ChangeNotifier implements DocumentHost {
     _fileWatchers.remove(id)?.cancel();
     _fileWatchSeq.remove(id);
     final s = _sessions.remove(id);
+    agentFiles.forgetTab(id);
+    _outputTurnFiles.forget(id);
     // Aba fechada explicitamente → descarta o scrollback persistido (só abas de
     // terminal têm). O app-quit NÃO passa por aqui (chama `s.dispose()` direto em
     // `dispose()`), então o registro sobrevive pra restaurar — que é o objetivo.
@@ -6309,6 +6362,7 @@ class CockpitViewModel extends ChangeNotifier implements DocumentHost {
       created,
       id,
     ); // descarta abas que não restauraram
+    agentGraph.restore(id, doc[kAgentGraphKey], remap: remap);
     _trees[id] = tree;
     final focused = doc['focused'] as String?;
     _focused[id] = (focused != null && findLeaf(tree, focused) != null)
@@ -6411,7 +6465,7 @@ class CockpitViewModel extends ChangeNotifier implements DocumentHost {
         // shell novo (reanexa a conversa). O replay mostra o histórico até o
         // agente redesenhar; nas demais abas (shell puro) só há o replay.
         // `harness` ausente = layout salvo antes desta distinção, quando só o
-        // Claude tinha hooks.
+        // Claude tinha hooks; desconhecido = não retoma (sem chute).
         final claudeSid = desc['claude_sid'] as String?;
         final harness = AgentHarness.fromWire(desc['harness'] as String?);
         // cwd vivo salvo (OSC 7, absoluto) vence o `sub` — restaura onde o
@@ -6425,7 +6479,7 @@ class CockpitViewModel extends ChangeNotifier implements DocumentHost {
           replay: raw == null ? null : 'c$raw\x1b[<9u\r\n',
           startupCommand: claudeSid == null || claudeSid.isEmpty
               ? null
-              : harness.resumeCommand(claudeSid),
+              : harness?.resumeCommand(claudeSid),
           // Re-arma a trava ANTES de o shell subir e re-emitir OSC-title: o nome
           // manual continua vencendo o título dinâmico após o reinício.
           manualLabel: desc['label'] as String?,
@@ -6498,6 +6552,13 @@ class CockpitViewModel extends ChangeNotifier implements DocumentHost {
           id: id,
           projectId: project.id,
           path: nbPath,
+        );
+        return true;
+      case 'agent_graph':
+        _sessions[id] = AgentGraphSession(
+          id: id,
+          projectId: project.id,
+          workingDirectory: project.path,
         );
         return true;
       case 'browser':
@@ -6637,6 +6698,7 @@ class CockpitViewModel extends ChangeNotifier implements DocumentHost {
       // Toggle de worktrees do rail (V37) — mora no mesmo doc do layout, então
       // sobrevive à sessão sem inventar outro store.
       kWorktreesExpandedKey: worktreesExpanded(projectId),
+      kAgentGraphKey: agentGraph.toJson(projectId, sessions.keys.toSet()),
     };
   }
 
@@ -6801,6 +6863,7 @@ class CockpitViewModel extends ChangeNotifier implements DocumentHost {
     if (s is NotebookSession) {
       return <String, dynamic>{'type': 'notebook', 'path': s.path};
     }
+    if (s is AgentGraphSession) return <String, dynamic>{'type': 'agent_graph'};
     if (s is MongoBrowserSession) {
       return <String, dynamic>{
         'type': 'mongo',
@@ -7036,6 +7099,9 @@ class CockpitViewModel extends ChangeNotifier implements DocumentHost {
   @override
   void dispose() {
     _remoteHosts.removeListener(_onRemoteHostsChanged);
+    agentMessages.dispose();
+    agentFiles.dispose();
+    agentGraph.dispose();
     unawaited(_statusServer.stop());
     unawaited(_previewSub?.cancel());
     unawaited(_remoteTurnSub?.cancel());

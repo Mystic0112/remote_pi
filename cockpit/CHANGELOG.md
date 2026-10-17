@@ -24,6 +24,54 @@ As versões seguem o `version:` do `pubspec.yaml` (SSOT). O campo `notes` do
     linhas não-vazias — o começo da seção deve fazer sentido sozinho.
 -->
 
+## [2.1.16] - 2026-10-11
+
+**Agents in different tabs can talk to each other, and Cockpit now knows
+when Antigravity, Cursor, Copilot, OpenCode and Pi are busy.**
+
+### Added
+
+- **`cockpit msg --to <label|tab-id> <text>`**: an agent messages another
+  tab's agent. The target receives `[from: <tab> · <harness>] <text>` and
+  Enter; labels resolve exactly like `read-tab` (ambiguous = error).
+- **`harness` in `cockpit list-tabs`**: the agent detected in each tab
+  (`claudeCode`, `codex`, `antigravity`, …) in `--json`, and as `[…]` in the
+  table.
+- **Antigravity skills**: `cockpit install-skill` also installs into
+  `~/.gemini/antigravity-cli/skills` when Antigravity is present.
+- **Who is touching what**: the Files panel has an agent filter. "All
+  agents" marks every file an agent edited with that tab's color (hover for
+  who and when; a warning when 2+ agents edited it in the last 10 minutes);
+  picking one agent lists only the files it touched, newest first. Claude
+  Code and Codex report the exact files through their hooks; other agents
+  are inferred from git at the end of each turn and marked "(inferred)".
+- **Agents graph** (topbar → Visualize agents): a canvas tab with every agent
+  in the workspace, its status, and cables between agents that exchanged
+  messages (thicker with volume, a dot runs along on each new message). Drag
+  from an agent's port to another to connect them — both get an intro with
+  the `cockpit msg` command — and use **New agent** to start Claude Code,
+  Codex, etc. in a new tab. Positions and connections are saved with the
+  workspace.
+- **`cockpit peers`**: lists the agents connected to your tab in the graph.
+- **New agent dialog** (graph "+" or right-click on the canvas): quick start
+  per installed agent CLI (or a plain shell), terminal name (the label
+  `cockpit msg --to` uses; duplicates are flagged), command, working
+  directory, a color for the agent, a role and an initial task that are sent
+  as its first messages once it is ready, and **Monitor activity** to silence
+  its end-of-turn badge, sound and notification.
+- **Maestro**: one agent per workspace can be the maestro. It is connected to
+  every agent on the canvas (and to agents started later), gets the list of
+  peers, and shows a badge on its card. Set it in the New agent dialog or
+  from an agent's right-click menu, which also has Focus, Rename and Close
+  tab. `cockpit peers --json` reports `maestro: true` for it.
+
+### Fixed
+
+- **Turn status for agents without hooks**: tabs running Antigravity,
+  Cursor, Copilot, OpenCode or Pi show the spinner while the agent prints and
+  go idle after ~3s of silence. Claude Code and Codex keep their hooks.
+- **Session restore no longer guesses Claude** for an unknown harness name.
+
 ## [2.1.15] - 2026-10-11
 
 **Four agent skills instead of one, installed on every machine (including

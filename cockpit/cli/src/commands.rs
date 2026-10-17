@@ -101,6 +101,72 @@ fn write_once(tab_id: &str, text: &str) {
     }
 }
 
+// ---- msg --------------------------------------------------------------------
+
+const MSG_HELP: &str = "cockpit msg --to <label|tab-id> [--json] <text...>
+  Messages another agent: types `[from: <your tab> · <your harness>] <text>`
+  into the target tab and presses Enter. The sender is this tab
+  ($COCKPIT_TAB_ID), so it only works inside a Cockpit terminal.
+  --to   stable tab label (exact, case-insensitive) or tab-id; an ambiguous
+         label is an error (see `cockpit list-tabs`)
+  Prints the target tab id (--json: {\"from\": …, \"to\": …}).";
+
+/// `--to` sai dos argumentos; o resto vai pro [Flags::parse] (texto + `--json`).
+fn split_msg_args(args: &[String]) -> (Option<String>, Vec<String>) {
+    let mut to = None;
+    let mut rest = Vec::new();
+    let mut i = 0usize;
+    while i < args.len() {
+        if args[i] == "--" {
+            rest.extend(args[i..].iter().cloned());
+            break;
+        }
+        match take(args, &mut i, &["--to"]) {
+            Some((_, v)) => to = v,
+            None => rest.push(args[i].clone()),
+        }
+        i += 1;
+    }
+    (to, rest)
+}
+
+pub fn msg(args: &[String]) -> ! {
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        println!("{MSG_HELP}");
+        std::process::exit(0);
+    }
+    let (to, rest) = split_msg_args(args);
+    let parsed = Flags::parse(&rest);
+    let to = to
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| die(&format!("cockpit msg: missing --to\n{MSG_HELP}"), 2));
+    let text = parsed.positionals.join(" ");
+    if text.is_empty() {
+        die("cockpit msg: missing text", 2);
+    }
+    let from = self_tab_id().unwrap_or_else(|| {
+        die(
+            "cockpit msg: COCKPIT_TAB_ID is unset — run it inside a Cockpit \
+terminal (the sender is the current tab)",
+            2,
+        )
+    });
+    let resp = transport::request(
+        json!({"cmd": "msg", "tabId": from, "args": {"to": to, "text": text}}),
+        DEFAULT_TIMEOUT,
+    );
+    if !is_ok(&resp) {
+        fail_with(&resp);
+    }
+    let data = resp.get("data").cloned().unwrap_or_else(|| json!({}));
+    if parsed.json {
+        println!("{}", data);
+    } else {
+        println!("{}", data.get("to").and_then(|v| v.as_str()).unwrap_or(""));
+    }
+    std::process::exit(0)
+}
+
 // ---- open -------------------------------------------------------------------
 
 pub fn open(args: &[String]) -> ! {
@@ -693,8 +759,8 @@ pub fn list(cmd: &str, args: &[String]) -> ! {
     let parsed = Flags::parse(args);
     let mut req = json!({"cmd": cmd});
     // `list-tasks` lista as tasks do workspace da tab emissora (ou da
-    // `--tab-id` passada); os outros list-* ignoram o campo — mandar sempre é
-    // inofensivo.
+    // `--tab-id` passada) e `peers` os links dela; os outros list-* ignoram o
+    // campo — mandar sempre é inofensivo.
     with_tab_id(&mut req, parsed.effective_tab_id());
     let resp = transport::request(req, DEFAULT_TIMEOUT);
     if !is_ok(&resp) {
@@ -756,12 +822,36 @@ pub fn format_list(cmd: &str, data: &[Value]) -> Vec<String> {
                 } else {
                     field(e, "workspaceId")
                 };
+                // Harness detectado (`claudeCode`, `antigravity`…), quando há.
+                let harness = field(e, "harness");
+                let harness = if harness.is_empty() {
+                    String::new()
+                } else {
+                    format!("  [{harness}]")
+                };
                 out.push(format!(
-                    "{flag} {} {} {} {name}",
+                    "{flag} {} {} {} {name}{harness}",
                     pad(&field(e, "id"), 6),
                     pad(&field(e, "kind"), 9),
                     pad(&ws, 14)
                 ));
+            }
+            // Links definidos no grafo de agentes (`cockpit peers`).
+            "peers" => {
+                let flag = if e.get("working") == Some(&Value::Bool(true)) {
+                    "●"
+                } else {
+                    " "
+                };
+                let label = field(e, "label");
+                let name = if label.is_empty() { field(e, "title") } else { label };
+                let harness = field(e, "harness");
+                let harness = if harness.is_empty() {
+                    String::new()
+                } else {
+                    format!("  [{harness}]")
+                };
+                out.push(format!("{flag} {} {name}{harness}", pad(&field(e, "id"), 6)));
             }
             "list-tasks" => {
                 let flag = if e.get("running") == Some(&Value::Bool(true)) {
@@ -1901,6 +1991,39 @@ mod tests {
         let data = vec![json!({"id": "t2", "label": "Cockpit", "title": "zsh"})];
         let lines = format_list("list-panes", &data);
         assert!(lines[0].ends_with("⚲ Cockpit"), "{}", lines[0]);
+    }
+
+    #[test]
+    fn harness_aparece_no_fim() {
+        let data = vec![json!({"id": "t4", "title": "agy", "harness": "antigravity"})];
+        let lines = format_list("list-panes", &data);
+        assert!(lines[0].ends_with("agy  [antigravity]"), "{}", lines[0]);
+        let sem = vec![json!({"id": "t5", "title": "zsh", "harness": null})];
+        assert!(format_list("list-panes", &sem)[0].ends_with("zsh"));
+    }
+
+    #[test]
+    fn peers_mostra_label_ou_titulo() {
+        let data = vec![
+            json!({"id": "t2", "label": "Reviewer", "title": "claude", "harness": "claudeCode", "working": true}),
+            json!({"id": "t5", "label": null, "title": "codex", "harness": null, "working": false}),
+        ];
+        let lines = format_list("peers", &data);
+        assert_eq!(lines[0], "● t2     Reviewer  [claudeCode]");
+        assert_eq!(lines[1], "  t5     codex");
+    }
+
+    #[test]
+    fn msg_separa_to_do_texto() {
+        let args: Vec<String> = ["--to", "Worker", "--json", "roda", "--to=x", "--", "--to"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let (to, rest) = split_msg_args(&args);
+        assert_eq!(to.as_deref(), Some("x"), "o último --to vence");
+        let f = Flags::parse(&rest);
+        assert!(f.json);
+        assert_eq!(f.positionals, vec!["roda", "--to"], "depois de -- é texto");
     }
 
     #[test]

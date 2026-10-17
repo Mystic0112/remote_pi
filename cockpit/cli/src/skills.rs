@@ -19,7 +19,7 @@ use crate::util::{die, home_dir};
 include!(concat!(env!("OUT_DIR"), "/skills_gen.rs"));
 
 const MANIFEST: &str = ".cockpit-skill.json";
-const HELP: &str = "cockpit install-skill [--agent claude|codex|pi|all] [--force] [--list]
+const HELP: &str = "cockpit install-skill [--agent claude|codex|pi|antigravity|all] [--force] [--list]
   Installs Cockpit's agent skills (cockpit-cli, …) into the skills folder of each
   harness found in $HOME. Idempotent: identical files are left alone, files that
   no longer ship are removed. --list prints the embedded skills and exits.";
@@ -30,6 +30,9 @@ const AGENTS: &[(&str, &str, &str)] = &[
     ("claude", ".claude/skills", ".claude"),
     ("codex", ".codex/skills", ".codex"),
     ("pi", ".pi/agent/skills", ".pi/agent"),
+    // `agy` lê SKILL.md de ~/.gemini/antigravity-cli/skills/<nome>/.
+    ("antigravity", ".gemini/antigravity-cli/skills", ".gemini/antigravity-cli"),
+    // ponytail: Cursor/Copilot/OpenCode ficam de fora até a pasta de skills deles ser verificada.
 ];
 
 pub fn install_skill(args: &[String]) -> ! {
@@ -80,7 +83,7 @@ pub fn install_skill(args: &[String]) -> ! {
         .collect();
     if targets.is_empty() {
         die(
-            &format!("cockpit install-skill: unknown agent {agent} (claude|codex|pi|all)"),
+            &format!("cockpit install-skill: unknown agent {agent} (claude|codex|pi|antigravity|all)"),
             2,
         );
     }

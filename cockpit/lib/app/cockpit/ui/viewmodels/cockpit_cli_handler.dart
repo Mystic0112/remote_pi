@@ -30,6 +30,7 @@ import 'package:cockpit/app/core/domain/result.dart';
 import 'package:cockpit/app/core/utils/path_utils.dart';
 import 'package:cockpit/app/core/utils/shell_command.dart';
 import 'package:cockpit/app/cockpit/ui/document/document_windows.dart';
+import 'package:cockpit/app/cockpit/ui/session/agent_graph_session.dart';
 import 'package:cockpit/app/cockpit/ui/session/empty_tab.dart';
 import 'package:cockpit/app/cockpit/ui/session/browser_session.dart';
 import 'package:cockpit/app/cockpit/ui/session/notebook_session.dart';
@@ -44,6 +45,8 @@ import 'package:cockpit/app/cockpit/ui/session/task_terminal_store.dart';
 import 'package:cockpit/app/cockpit/ui/session/terminal_read_window.dart';
 import 'package:cockpit/app/cockpit/ui/session/terminal_session.dart';
 import 'package:cockpit/app/cockpit/ui/states/pane_node.dart' show SplitDir;
+import 'package:cockpit/app/cockpit/ui/viewmodels/agent_graph_store.dart';
+import 'package:cockpit/app/cockpit/ui/viewmodels/agent_message_delivery.dart';
 import 'package:cockpit/app/cockpit/ui/viewmodels/cockpit_viewmodel.dart';
 import 'package:cockpit/app/cockpit/ui/viewmodels/telemetry_cli_handler.dart';
 
@@ -202,12 +205,28 @@ class CockpitCliHandler {
                 // mesmo aceito por `read-task`. Ausente nas demais tabs.
                 if (s is TaskOutputSession) 'taskId': s.taskId,
                 'working': s.isWorking,
+                // Harness detectado no processo da aba (`HarnessKind.name`:
+                // `claudeCode`, `antigravity`…), `null` fora de agente.
+                'harness': s is TerminalSession ? s.activeHarness?.name : null,
                 // Aba em foco (a que `--focused` mira). Sempre no máximo uma.
                 'focused': s.id == focusedId,
               },
             )
             .toList();
         return CockpitCommandResult.ok(panes);
+
+      // `cockpit msg --to <label|tab-id> <texto>` — agente fala com agente.
+      // `tabId` é o EMISSOR (a CLI exige `$COCKPIT_TAB_ID`), `to` o alvo.
+      case 'msg':
+        return _sendAgentMessage(c);
+
+      // `cockpit peers` — links definidos no grafo de agentes da aba emissora.
+      case 'peers':
+        final caller = c.tabId == null ? null : _vm.session(c.tabId!);
+        if (caller == null) return _unknownCaller();
+        return CockpitCommandResult.ok(
+          agentPeers(_vm.agentGraph, caller, _vm.allSessions),
+        );
 
       // `cockpit open <path>` — abre um arquivo no viewer. A CLI já resolveu
       // pro caminho absoluto (o cwd do pane ≠ cwd do app). Abre no workspace do
@@ -1525,26 +1544,44 @@ class CockpitCliHandler {
     }
   });
 
-  /// Resolve o alvo de um `read-pane`: primeiro por id exato (`t3`), depois
-  /// por `manualLabel` (case-insensitive). Label ambíguo = erro — nunca chuta
-  /// pane (mesma regra do dispatch de orquestração).
-  Result<PaneItem, String> _resolvePaneTarget(String target) {
-    final byId = _vm.session(target);
-    if (byId != null) return Success(byId);
-    final lower = target.toLowerCase();
-    final byLabel = _vm.allSessions
-        .where((s) => s.manualLabel?.toLowerCase() == lower)
-        .toList();
-    if (byLabel.length == 1) return Success(byLabel.first);
-    if (byLabel.length > 1) {
-      return Failure(
-        'label "$target" is ambiguous (${byLabel.length} tabs) — '
-        'use a tab-id from `cockpit list-tabs`',
-      );
+  Result<PaneItem, String> _resolvePaneTarget(String target) =>
+      resolveTabTarget(target, _vm.allSessions);
+
+  CockpitCommandResult _unknownCaller() => const CockpitCommandResult.fail(
+    'unknown tab (run inside a Cockpit terminal)',
+  );
+
+  CockpitCommandResult _sendAgentMessage(CockpitCommand c) {
+    final sender = c.tabId == null ? null : _vm.session(c.tabId!);
+    if (sender == null) return _unknownCaller();
+    final to = (c.args['to'] ?? '').toString();
+    final text = (c.args['text'] ?? '').toString();
+    if (to.isEmpty) return const CockpitCommandResult.fail('missing --to');
+    if (text.isEmpty) return const CockpitCommandResult.fail('missing text');
+    final TerminalSession target;
+    switch (resolveTabTarget(to, _vm.allSessions)) {
+      case Success(:final value) when value is TerminalSession:
+        target = value;
+      case Success(:final value):
+        return CockpitCommandResult.fail('tab "${value.id}" is not a terminal');
+      case Failure(:final error):
+        return CockpitCommandResult.fail(error);
     }
-    return Failure(
-      'no tab with id or label "$target" (see `cockpit list-tabs`)',
+    if (target.id == sender.id) {
+      return const CockpitCommandResult.fail('cannot message your own tab');
+    }
+    deliverAgentMessage(
+      log: _vm.agentMessages,
+      from: sender,
+      target: target,
+      // Sem label manual, o título é dinâmico (Codex/Claude reescrevem com
+      // spinner e status): assina com o id estável da aba.
+      senderName: sender.manualLabel ?? sender.id,
+      senderHarness: agentKindLabel(sender),
+      text: text,
+      targetAlive: () => identical(_vm.session(target.id), target),
     );
+    return CockpitCommandResult.ok({'from': sender.id, 'to': target.id});
   }
 
   Future<String> _resolveRemotePath(RemoteHost host, String rawPath) async {
@@ -1671,6 +1708,7 @@ class CockpitCliHandler {
     if (s is RedisBrowserSession) return 'redis';
     if (s is MongoBrowserSession) return 'mongo';
     if (s is NotebookSession) return 'notebook';
+    if (s is AgentGraphSession) return 'agents';
     return 'other';
   }
 
@@ -1685,4 +1723,28 @@ class CockpitCliHandler {
     if (id == null || id.isEmpty) return null;
     return CockpitCommand(cmd: c.cmd, tabId: id, args: c.args);
   }
+}
+
+/// Resolve o alvo de um verbo de aba (`read-tab`, `msg`, …): primeiro por id
+/// exato (`t3`), depois por `manualLabel` (case-insensitive). Label ambíguo =
+/// erro — nunca chuta pane (mesma regra do dispatch de orquestração).
+Result<PaneItem, String> resolveTabTarget(
+  String target,
+  Iterable<PaneItem> sessions,
+) {
+  for (final s in sessions) {
+    if (s.id == target) return Success(s);
+  }
+  final lower = target.toLowerCase();
+  final byLabel = sessions
+      .where((s) => s.manualLabel?.toLowerCase() == lower)
+      .toList();
+  if (byLabel.length == 1) return Success(byLabel.first);
+  if (byLabel.length > 1) {
+    return Failure(
+      'label "$target" is ambiguous (${byLabel.length} tabs) — '
+      'use a tab-id from `cockpit list-tabs`',
+    );
+  }
+  return Failure('no tab with id or label "$target" (see `cockpit list-tabs`)');
 }

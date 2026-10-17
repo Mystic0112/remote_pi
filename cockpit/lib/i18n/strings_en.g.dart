@@ -187,6 +187,7 @@ class Translations$cockpit$en {
 	late final Translations$cockpit$layoutPreview$en layoutPreview = Translations$cockpit$layoutPreview$en.internal(_root);
 	late final Translations$cockpit$telemetry$en telemetry = Translations$cockpit$telemetry$en.internal(_root);
 	late final Translations$cockpit$panelView$en panelView = Translations$cockpit$panelView$en.internal(_root);
+	late final Translations$cockpit$agentGraph$en agentGraph = Translations$cockpit$agentGraph$en.internal(_root);
 }
 
 // Path: settings
@@ -1048,6 +1049,27 @@ class Translations$cockpit$fileTreePanel$en {
 
 	/// en: 'Refresh'
 	String get refreshTooltip => 'Refresh';
+
+	/// en: 'Filter by agent'
+	String get agentFilterTooltip => 'Filter by agent';
+
+	/// en: 'All agents'
+	String get allAgents => 'All agents';
+
+	/// en: 'tracking unavailable'
+	String get trackingUnavailable => 'tracking unavailable';
+
+	/// en: 'Edited by ${label} · ${time}'
+	String editedBy({required Object label, required Object time}) => 'Edited by ${label} · ${time}';
+
+	/// en: '(inferred)'
+	String get inferredSuffix => '(inferred)';
+
+	/// en: 'No files touched by this agent yet'
+	String get noTouchedFiles => 'No files touched by this agent yet';
+
+	/// en: 'Edited by 2+ agents in the last 10 minutes'
+	String get concurrentAgentEdits => 'Edited by 2+ agents in the last 10 minutes';
 
 	/// en: 'Collapse all folders'
 	String get collapseAll => 'Collapse all folders';
@@ -2111,6 +2133,9 @@ class Translations$cockpit$topbar$en {
 
 	/// en: 'Hide keyboard'
 	String get hideKeyboard => 'Hide keyboard';
+
+	/// en: 'Visualize agents'
+	String get visualizeAgents => 'Visualize agents';
 }
 
 // Path: cockpit.tasks
@@ -2759,6 +2784,144 @@ class Translations$cockpit$panelView$en {
 
 	/// en: 'Open as HTML'
 	String get openAsHtml => 'Open as HTML';
+}
+
+// Path: cockpit.agentGraph
+class Translations$cockpit$agentGraph$en {
+	Translations$cockpit$agentGraph$en.internal(this._root);
+
+	final Translations _root; // ignore: unused_field
+
+	// Translations
+
+	/// en: 'Agents'
+	String get tabTitle => 'Agents';
+
+	/// en: 'New agent'
+	String get newAgent => 'New agent';
+
+	/// en: 'No agents in this workspace'
+	String get emptyTitle => 'No agents in this workspace';
+
+	/// en: 'Start an agent in a terminal or create one here. Drag from an agent's port to another agent to connect them.'
+	String get emptyHint => 'Start an agent in a terminal or create one here. Drag from an agent\'s port to another agent to connect them.';
+
+	/// en: 'Working'
+	String get statusWorking => 'Working';
+
+	/// en: 'Waiting'
+	String get statusWaiting => 'Waiting';
+
+	/// en: 'Idle'
+	String get statusIdle => 'Idle';
+
+	/// en: 'Messages: ${n}'
+	String messageCount({required Object n}) => 'Messages: ${n}';
+
+	/// en: 'Last: ${preview}'
+	String lastMessage({required Object preview}) => 'Last: ${preview}';
+
+	/// en: 'Connected'
+	String get linked => 'Connected';
+
+	/// en: 'Right-click to remove the connection'
+	String get removeLinkHint => 'Right-click to remove the connection';
+
+	/// en: 'Remove connection'
+	String get removeLink => 'Remove connection';
+
+	/// en: 'Drag to another agent to connect'
+	String get connectHint => 'Drag to another agent to connect';
+
+	/// en: 'Quick start'
+	String get quickStart => 'Quick start';
+
+	/// en: 'Shell'
+	String get shell => 'Shell';
+
+	/// en: 'Details'
+	String get tabDetails => 'Details';
+
+	/// en: 'Appearance'
+	String get tabAppearance => 'Appearance';
+
+	/// en: 'Agent'
+	String get tabAgent => 'Agent';
+
+	/// en: 'Terminal name'
+	String get name => 'Terminal name';
+
+	/// en: 'e.g. Reviewer'
+	String get namePlaceholder => 'e.g. Reviewer';
+
+	/// en: 'Another tab already uses this name. Names must be unique so `cockpit msg --to` can reach it.'
+	String get nameTaken => 'Another tab already uses this name. Names must be unique so `cockpit msg --to` can reach it.';
+
+	/// en: 'Command'
+	String get command => 'Command';
+
+	/// en: 'e.g. claude --model opus (empty = shell)'
+	String get commandPlaceholder => 'e.g. claude --model opus (empty = shell)';
+
+	/// en: 'Working directory'
+	String get cwd => 'Working directory';
+
+	/// en: 'Browse…'
+	String get browse => 'Browse…';
+
+	/// en: 'This folder does not exist.'
+	String get cwdMissing => 'This folder does not exist.';
+
+	/// en: 'Monitor activity'
+	String get monitor => 'Monitor activity';
+
+	/// en: 'Badge, sound and notification when a turn ends.'
+	String get monitorHint => 'Badge, sound and notification when a turn ends.';
+
+	/// en: 'Maestro'
+	String get maestro => 'Maestro';
+
+	/// en: 'Promotes this agent to maestro: it is connected to every agent on the canvas and coordinates them.'
+	String get maestroTooltip => 'Promotes this agent to maestro: it is connected to every agent on the canvas and coordinates them.';
+
+	/// en: '${name} is the current maestro and will be demoted.'
+	String maestroReplaces({required Object name}) => '${name} is the current maestro and will be demoted.';
+
+	/// en: 'Color'
+	String get color => 'Color';
+
+	/// en: 'Automatic'
+	String get colorAuto => 'Automatic';
+
+	/// en: 'Role / instructions'
+	String get role => 'Role / instructions';
+
+	/// en: 'Sent as its first message once the agent is ready.'
+	String get rolePlaceholder => 'Sent as its first message once the agent is ready.';
+
+	/// en: 'Initial task'
+	String get task => 'Initial task';
+
+	/// en: 'Sent right after the role.'
+	String get taskPlaceholder => 'Sent right after the role.';
+
+	/// en: 'Focus'
+	String get focus => 'Focus';
+
+	/// en: 'Rename'
+	String get rename => 'Rename';
+
+	/// en: 'Rename agent'
+	String get renameTitle => 'Rename agent';
+
+	/// en: 'Make maestro'
+	String get makeMaestro => 'Make maestro';
+
+	/// en: 'Remove maestro'
+	String get removeMaestro => 'Remove maestro';
+
+	/// en: 'Close tab'
+	String get closeTab => 'Close tab';
 }
 
 // Path: settings.language
@@ -4205,6 +4368,13 @@ extension on Translations {
 			'cockpit.fileTreePanel.newFile' => 'New file',
 			'cockpit.fileTreePanel.newFolder' => 'New folder',
 			'cockpit.fileTreePanel.refreshTooltip' => 'Refresh',
+			'cockpit.fileTreePanel.agentFilterTooltip' => 'Filter by agent',
+			'cockpit.fileTreePanel.allAgents' => 'All agents',
+			'cockpit.fileTreePanel.trackingUnavailable' => 'tracking unavailable',
+			'cockpit.fileTreePanel.editedBy' => ({required Object label, required Object time}) => 'Edited by ${label} · ${time}',
+			'cockpit.fileTreePanel.inferredSuffix' => '(inferred)',
+			'cockpit.fileTreePanel.noTouchedFiles' => 'No files touched by this agent yet',
+			'cockpit.fileTreePanel.concurrentAgentEdits' => 'Edited by 2+ agents in the last 10 minutes',
 			'cockpit.fileTreePanel.collapseAll' => 'Collapse all folders',
 			'cockpit.fileTreePanel.sectionSourceControl' => 'SOURCE CONTROL',
 			'cockpit.fileTreePanel.viewAsList' => 'View as List',
@@ -4463,6 +4633,8 @@ extension on Translations {
 			'cockpit.dbConnectionDialog.choosePrivateKeyDialogTitle' => 'Choose SSH private key',
 			'cockpit.dbConnectionDialog.keyPassphrase' => 'Key passphrase',
 			'cockpit.dbConnectionDialog.savePassphrase' => 'Save passphrase',
+			_ => null,
+		} ?? switch (path) {
 			'cockpit.dbConnectionDialog.passwordOnHost' => 'The password is stored on the host, not on this machine.',
 			'cockpit.sshPrompts.unknownSshHostTitle' => 'Unknown SSH host',
 			'cockpit.sshPrompts.neverConnected' => ({required Object endpoint}) => 'Cockpit has never connected to ${endpoint} before.',
@@ -4470,8 +4642,6 @@ extension on Translations {
 			'cockpit.sshPrompts.trust' => 'Trust',
 			'cockpit.sshPrompts.sshKeyPassphraseTitle' => 'SSH key passphrase',
 			'cockpit.sshPrompts.unlockMessage' => ({required Object keyPath, required Object connectionName}) => 'Unlock ${keyPath} to connect "${connectionName}".',
-			_ => null,
-		} ?? switch (path) {
 			'cockpit.sshPrompts.keptInMemoryHint' => 'Kept in memory until Cockpit quits. To let agents use this connection, enable "Save passphrase" in the connection.',
 			'cockpit.sshPrompts.unlock' => 'Unlock',
 			'cockpit.projectsRail.workspaces' => 'Workspaces',
@@ -4522,6 +4692,7 @@ extension on Translations {
 			'cockpit.topbar.toggleFiles' => 'Show/hide files',
 			'cockpit.topbar.filesUnavailable' => 'Files unavailable in Cockpit',
 			'cockpit.topbar.hideKeyboard' => 'Hide keyboard',
+			'cockpit.topbar.visualizeAgents' => 'Visualize agents',
 			'cockpit.tasks.hotReload' => 'Hot reload',
 			'cockpit.tasks.hotRestart' => 'Hot restart',
 			'cockpit.tasks.toggleDebugPaint' => 'Toggle debug paint',
@@ -4733,6 +4904,49 @@ extension on Translations {
 			'cockpit.panelView.unavailable' => 'Panels need the embedded web view, which is not available on Linux yet.',
 			'cockpit.panelView.openInBrowser' => 'Open in browser',
 			'cockpit.panelView.openAsHtml' => 'Open as HTML',
+			'cockpit.agentGraph.tabTitle' => 'Agents',
+			'cockpit.agentGraph.newAgent' => 'New agent',
+			'cockpit.agentGraph.emptyTitle' => 'No agents in this workspace',
+			'cockpit.agentGraph.emptyHint' => 'Start an agent in a terminal or create one here. Drag from an agent\'s port to another agent to connect them.',
+			'cockpit.agentGraph.statusWorking' => 'Working',
+			'cockpit.agentGraph.statusWaiting' => 'Waiting',
+			'cockpit.agentGraph.statusIdle' => 'Idle',
+			'cockpit.agentGraph.messageCount' => ({required Object n}) => 'Messages: ${n}',
+			'cockpit.agentGraph.lastMessage' => ({required Object preview}) => 'Last: ${preview}',
+			'cockpit.agentGraph.linked' => 'Connected',
+			'cockpit.agentGraph.removeLinkHint' => 'Right-click to remove the connection',
+			'cockpit.agentGraph.removeLink' => 'Remove connection',
+			'cockpit.agentGraph.connectHint' => 'Drag to another agent to connect',
+			'cockpit.agentGraph.quickStart' => 'Quick start',
+			'cockpit.agentGraph.shell' => 'Shell',
+			'cockpit.agentGraph.tabDetails' => 'Details',
+			'cockpit.agentGraph.tabAppearance' => 'Appearance',
+			'cockpit.agentGraph.tabAgent' => 'Agent',
+			'cockpit.agentGraph.name' => 'Terminal name',
+			'cockpit.agentGraph.namePlaceholder' => 'e.g. Reviewer',
+			'cockpit.agentGraph.nameTaken' => 'Another tab already uses this name. Names must be unique so `cockpit msg --to` can reach it.',
+			'cockpit.agentGraph.command' => 'Command',
+			'cockpit.agentGraph.commandPlaceholder' => 'e.g. claude --model opus (empty = shell)',
+			'cockpit.agentGraph.cwd' => 'Working directory',
+			'cockpit.agentGraph.browse' => 'Browse…',
+			'cockpit.agentGraph.cwdMissing' => 'This folder does not exist.',
+			'cockpit.agentGraph.monitor' => 'Monitor activity',
+			'cockpit.agentGraph.monitorHint' => 'Badge, sound and notification when a turn ends.',
+			'cockpit.agentGraph.maestro' => 'Maestro',
+			'cockpit.agentGraph.maestroTooltip' => 'Promotes this agent to maestro: it is connected to every agent on the canvas and coordinates them.',
+			'cockpit.agentGraph.maestroReplaces' => ({required Object name}) => '${name} is the current maestro and will be demoted.',
+			'cockpit.agentGraph.color' => 'Color',
+			'cockpit.agentGraph.colorAuto' => 'Automatic',
+			'cockpit.agentGraph.role' => 'Role / instructions',
+			'cockpit.agentGraph.rolePlaceholder' => 'Sent as its first message once the agent is ready.',
+			'cockpit.agentGraph.task' => 'Initial task',
+			'cockpit.agentGraph.taskPlaceholder' => 'Sent right after the role.',
+			'cockpit.agentGraph.focus' => 'Focus',
+			'cockpit.agentGraph.rename' => 'Rename',
+			'cockpit.agentGraph.renameTitle' => 'Rename agent',
+			'cockpit.agentGraph.makeMaestro' => 'Make maestro',
+			'cockpit.agentGraph.removeMaestro' => 'Remove maestro',
+			'cockpit.agentGraph.closeTab' => 'Close tab',
 			'settings.language.title' => 'Language',
 			'settings.language.system' => 'System',
 			'settings.language.english' => 'English',
@@ -4933,6 +5147,8 @@ extension on Translations {
 			'settings.remoteHosts.deviceKeyCopied' => 'Public key copied',
 			'settings.remoteHosts.statusConnected' => 'Connected',
 			'settings.remoteHosts.statusConnecting' => 'Connecting…',
+			_ => null,
+		} ?? switch (path) {
 			'settings.remoteHosts.statusReconnecting' => 'Reconnecting…',
 			'settings.remoteHosts.statusOffline' => 'Offline',
 			'settings.remoteHosts.statusIdle' => 'Not connected',
@@ -4984,8 +5200,6 @@ extension on Translations {
 			'theme.error.missingField' => ({required Object field}) => 'Missing required field "${field}".',
 			'theme.error.badColor' => ({required Object value, required Object field}) => '"${value}" at "${field}" is not a color. Use #RGB, #RRGGBB or #RRGGBBAA.',
 			'theme.error.unknownBase' => ({required Object value}) => 'Unknown base theme "${value}" in "extends".',
-			_ => null,
-		} ?? switch (path) {
 			'theme.error.noVariants' => 'The theme declares no variant. Add "dark", "light" or both under "variants".',
 			_ => null,
 		};

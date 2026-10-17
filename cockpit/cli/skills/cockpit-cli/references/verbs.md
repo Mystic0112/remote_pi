@@ -11,6 +11,21 @@ shows flags, output shape and the mistakes to avoid.
 - `cockpit send-key [--tab-id <id>] <Key>...` — press key(s): `Enter`, `Tab`,
   `Escape`, `Space`, `BSpace`, `Up`/`Down`/`Left`/`Right`, `Home`/`End`,
   `PageUp`/`PageDown`, `Delete`, and `C-<letter>` (e.g. `C-c` = Ctrl+C).
+- `cockpit msg --to <label|tab-id> [--json] <text...>` — message another
+  agent: the target tab receives `[from: <your label or title> · <your
+  harness>] <text>` followed by Enter (sent as a separate keystroke, so TUIs
+  submit it). The sender is your own tab (`$COCKPIT_TAB_ID`, required); `--to`
+  resolves like `read-tab` (tab-id, else exact case-insensitive label; an
+  ambiguous label fails). Prints the target id (`--json`: `{"from","to"}`).
+  Messaging your own tab or a non-terminal tab fails.
+- `cockpit peers [--json]` — the agents linked to your tab (`$COCKPIT_TAB_ID`)
+  in the Agents graph (topbar → Visualize agents): one line per peer with its
+  tab id, label (or title), `[harness]` and `●` while working. `--json`: array
+  of `{"id","label","title","harness","working"}`; `label` may be null — then
+  address the peer by `id`. Empty (`(none)`) when the human linked nobody.
+  When a link is created both sides receive `[from: cockpit] You are now
+  connected to <name> (<harness>). Talk to it with: cockpit msg --to <label|id>
+  "..."`.
 - `cockpit new-tab [--cwd <dir>] [--title <name>] [--split h|v]` — open a new
   **terminal tab** in the app and print its id (`t12`). `--cwd` defaults to
   your current directory; `--title` sets the stable tab label (so `send`/
@@ -98,8 +113,13 @@ shows flags, output shape and the mistakes to avoid.
 - `cockpit list-tabs [--json]` (alias: `list-panes`) — active tabs: `id`,
   `kind` (terminal|agent|file|task), `title` (dynamic), `label` (manual stable
   name, or null), `workspaceId` (opaque UUID), `workspacePath` (workspace root
-  on disk), `working`, and `taskId` on task-output tabs (the id `read-task`
-  accepts). Resolve a tab by its stable `label`, not the dynamic `title`.
+  on disk), `working`, `harness` (the agent detected in the tab: `claudeCode`,
+  `codex`, `antigravity`, `cursor`, `gitHubCopilot`, `openCode`, `pi`, or
+  null), and `taskId` on task-output tabs (the id `read-task` accepts).
+  Resolve a tab by its stable `label`, not the dynamic `title`. `working`
+  comes from hooks for Claude Code and Codex; for other agents it is inferred
+  from terminal output (busy while it prints, idle after ~3s of silence), so
+  treat it as a hint there.
 - `cockpit list-workspaces [--json]` — open projects: `id` (opaque UUID),
   `name`, `path` (root on disk), `tabs`.
 - `cockpit new-workspace <path> [--host <ssh-target>] [--name <title>] [--json]`

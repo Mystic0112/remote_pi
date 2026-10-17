@@ -8,6 +8,9 @@ import 'package:cockpit/app/cockpit/domain/entities/git_history_file_change.dart
 import 'package:cockpit/app/cockpit/domain/entities/git_file_status.dart';
 import 'package:cockpit/app/cockpit/domain/entities/notebook_document.dart';
 import 'package:cockpit/app/cockpit/domain/entities/git_info.dart';
+import 'package:cockpit/app/cockpit/ui/session/terminal_session.dart';
+import 'package:cockpit/app/cockpit/ui/viewmodels/agent_file_activity.dart';
+import 'package:cockpit/app/cockpit/ui/widgets/agent_file_marks.dart';
 import 'package:cockpit/app/cockpit/ui/widgets/commit_message_dialog.dart';
 import 'package:cockpit/app/cockpit/ui/widgets/confirm_dialog.dart';
 import 'package:cockpit/app/cockpit/ui/widgets/git_history_panel.dart';
@@ -149,7 +152,18 @@ class FileTreePanel extends StatefulWidget {
     this.commitMessageGeneratorLabel,
     this.revealPath,
     this.revealGen = 0,
+    this.agentFiles,
+    this.agentTabs,
+    this.agentColorOf = agentColorFor,
   });
+
+  /// "Quem está mexendo no quê": arquivos tocados por agente + as abas de
+  /// agente do workspace (lidas sob demanda). `null` = sem filtro nem marcas.
+  final AgentFileActivity? agentFiles;
+  final List<TerminalSession> Function()? agentTabs;
+
+  /// Cor do agente por aba (sobreposição do "New agent" ou a do hash).
+  final Color Function(String tabId) agentColorOf;
 
   /// "Revelar na árvore": arquivo-alvo + geração. Quando [revealGen] muda, a
   /// árvore expande a root e os folders ancestrais de [revealPath] (uma vez) e
@@ -389,6 +403,9 @@ class _PendingCreate {
 
 class _FileTreePanelState extends State<FileTreePanel> {
   int _localRefresh = 0;
+
+  /// Aba de agente filtrada na aba Files (`null` = todos, árvore normal).
+  String? _agentFilter;
 
   /// Geração do "Collapse all" (botão do cabeçalho, como no VS Code). Cada
   /// [_Folder] fecha ao ver uma geração nova — o estado de expansão é local a
@@ -1106,6 +1123,8 @@ class _FileTreePanelState extends State<FileTreePanel> {
               .where((path) => widget.gitStatusOf(path) != GitFileStatus.staged)
               .toList();
 
+    final agentFiles = widget.agentFiles;
+    final agentTabs = widget.agentTabs;
     final edit = _TreeEdit(
       pending: _pending,
       renaming: _renaming,
@@ -1140,7 +1159,24 @@ class _FileTreePanelState extends State<FileTreePanel> {
       onShowDiff: widget.onOpenDiff,
       gitStatusOf: widget.gitStatusOf,
       listChildren: widget.listChildren,
+      agentMarks: agentFiles == null || agentTabs == null
+          ? null
+          : (path) => AgentFileMarks(
+              path: path,
+              activity: agentFiles,
+              tabs: agentTabs,
+              colorOf: widget.agentColorOf,
+            ),
     );
+    // Filtro de uma aba que fechou cai de volta pra "todos".
+    final agentFilter =
+        agentFiles != null &&
+            agentTabs != null &&
+            _agentFilter != null &&
+            (agentFiles.touchedBy(_agentFilter!).isNotEmpty ||
+                agentTabs().any((s) => s.id == _agentFilter))
+        ? _agentFilter
+        : null;
 
     // Aba efetiva: source-control só existe em repo git; busca só com projeto.
     // Se a condição da aba ativa sumiu, cai de volta pra Files.
@@ -1242,6 +1278,14 @@ class _FileTreePanelState extends State<FileTreePanel> {
             _PanelHeader(
               title: context.t.cockpit.fileTreePanel.sectionFiles,
               actions: [
+                if (agentFiles != null && agentTabs != null)
+                  AgentFilterButton(
+                    activity: agentFiles,
+                    tabs: agentTabs,
+                    colorOf: widget.agentColorOf,
+                    selected: agentFilter,
+                    onSelected: (id) => setState(() => _agentFilter = id),
+                  ),
                 // "New file/folder": pasta/arquivo selecionado, senão a raiz
                 // do workspace.
                 if (_headerCreateTarget()?.isNotEmpty ?? false) ...[
@@ -1311,6 +1355,14 @@ class _FileTreePanelState extends State<FileTreePanel> {
                 ? (widget.galleryPanel ?? const SizedBox.shrink())
                 : telemetryMode
                 ? (widget.telemetryPanel ?? const SizedBox.shrink())
+                : agentFilter != null && !scMode
+                ? AgentTouchedList(
+                    tabId: agentFilter,
+                    rootPath: widget.rootPath,
+                    activity: agentFiles!,
+                    tabs: agentTabs!,
+                    onOpen: widget.onTapFile ?? widget.onOpenFile,
+                  )
                 : scMode
                 ? _sourceControlView == _SourceControlView.history
                       ? GitHistoryPanel(
@@ -1789,7 +1841,11 @@ class _TreeEdit {
     required this.onShowDiff,
     required this.gitStatusOf,
     required this.listChildren,
+    this.agentMarks,
   });
+
+  /// Marcas de agente ao lado do nome do arquivo (`null` = sem rastreio).
+  final Widget Function(String path)? agentMarks;
 
   final _PendingCreate? pending;
   final String? renaming;
@@ -1963,6 +2019,7 @@ class _DirViewState extends State<_DirView> {
                   selected: node.path == edit.selectedPath,
                   renaming: edit.renaming == node.path,
                   gitStatus: edit.gitStatusOf(node.path),
+                  trailing: edit.agentMarks?.call(node.path),
                   onTap: () {
                     edit.onSelect(node.path, false);
                     edit.onSelectFile?.call(node.path);
@@ -2442,7 +2499,11 @@ class _Row extends StatefulWidget {
     this.onCut,
     this.onPaste,
     this.canPaste = false,
+    this.trailing,
   });
+
+  /// À direita do nome (marcas de agente). Só linhas de arquivo.
+  final Widget? trailing;
 
   final int depth;
   final bool isFolder;
@@ -2576,6 +2637,7 @@ class _RowState extends State<_Row> {
                 : FileTypeIcon.file(widget.name, size: 16),
             const SizedBox(width: 7),
             Expanded(child: label),
+            ?widget.trailing,
           ],
         ),
       ),

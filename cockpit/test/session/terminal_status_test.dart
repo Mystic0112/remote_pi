@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:cockpit/app/cockpit/domain/contracts/terminal_gateway.dart';
+import 'package:cockpit/app/cockpit/domain/services/terminal_harness_monitor.dart';
+import 'package:cockpit/app/core/domain/entities/harness.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:cockpit/app/core/utils/spawn_directory.dart';
 import 'package:cockpit/app/core/domain/entities/terminal_profile.dart';
 import 'package:cockpit/app/cockpit/ui/session/terminal_session.dart';
@@ -40,11 +44,41 @@ class _NoopGateway implements TerminalGateway {
   }
 }
 
-TerminalSession _session() => TerminalSession(
-  id: 't1',
+/// Monitor que só guarda o callback: o teste decide qual harness "roda".
+class _FakeMonitor implements TerminalHarnessMonitor {
+  void Function(HarnessKind?)? onChange;
+
+  @override
+  void registerSession({
+    required String sessionId,
+    required int? Function() rootPid,
+    String? wslDistro,
+    required void Function(HarnessKind? newHarness) onHarnessChanged,
+  }) => onChange = onHarnessChanged;
+
+  @override
+  void unregisterSession(String sessionId) {}
+
+  @override
+  void requestPoll({String? sessionId, bool urgent = false}) {}
+
+  @override
+  void setSessionVisible(String sessionId, bool visible) {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+TerminalSession _session({
+  _NoopGateway? gateway,
+  TerminalHarnessMonitor? monitor,
+  String id = 't1',
+}) => TerminalSession(
+  id: id,
   projectId: 'p1',
   workingDirectory: '/tmp',
-  gateway: _NoopGateway(),
+  gateway: gateway ?? _NoopGateway(),
+  monitor: monitor,
   profile: const TerminalProfile(
     id: 'login-shell',
     label: 'sh (login)',
@@ -116,6 +150,73 @@ void main() {
       s.applyClaudeStatus(status: TerminalStatus.working, isTurnStart: false);
       expect(s.isWorking, isTrue);
       await s.dispose();
+    });
+  });
+
+  group('TerminalSession — status por saída (harness sem hook)', () {
+    const silence = TerminalSession.outputSilenceIdle;
+
+    test('saída liga, silêncio desliga; turno sustentado notifica', () {
+      fakeAsync((async) {
+        final gw = _NoopGateway();
+        final monitor = _FakeMonitor();
+        final s = _session(gateway: gw, monitor: monitor);
+        var finished = 0;
+        s.onTurnFinished = () => finished++;
+        void out() {
+          gw._out.add(utf8.encode('x'));
+          async.flushMicrotasks();
+        }
+
+        out(); // sem harness: shell puro não vira "working"
+        expect(s.isWorking, isFalse);
+
+        monitor.onChange!(HarnessKind.antigravity);
+        out();
+        expect(s.isWorking, isTrue);
+        async.elapse(silence ~/ 2);
+        out(); // ainda imprimindo no 1º tick → turno sustentado
+        async.elapse(silence);
+        expect(s.isWorking, isTrue);
+        async.elapse(silence + const Duration(milliseconds: 100));
+        expect(s.isWorking, isFalse);
+        expect(finished, 1);
+        unawaited(s.dispose());
+        async.flushMicrotasks();
+      });
+    });
+
+    test('redesenho isolado apaga o spinner sem notificar', () {
+      fakeAsync((async) {
+        final gw = _NoopGateway();
+        final monitor = _FakeMonitor();
+        final s = _session(gateway: gw, monitor: monitor);
+        var finished = 0;
+        s.onTurnFinished = () => finished++;
+        monitor.onChange!(HarnessKind.openCode);
+        gw._out.add(utf8.encode('x'));
+        async.flushMicrotasks();
+        expect(s.isWorking, isTrue);
+        async.elapse(silence + const Duration(milliseconds: 100));
+        expect(s.isWorking, isFalse);
+        expect(finished, 0);
+        unawaited(s.dispose());
+        async.flushMicrotasks();
+      });
+    });
+
+    test('harness com hook ignora a saída', () {
+      fakeAsync((async) {
+        final gw = _NoopGateway();
+        final monitor = _FakeMonitor();
+        final s = _session(gateway: gw, monitor: monitor);
+        monitor.onChange!(HarnessKind.claudeCode);
+        gw._out.add(utf8.encode('x'));
+        async.flushMicrotasks();
+        expect(s.isWorking, isFalse);
+        unawaited(s.dispose());
+        async.flushMicrotasks();
+      });
     });
   });
 }

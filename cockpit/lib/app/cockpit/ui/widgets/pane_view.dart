@@ -6,6 +6,7 @@ import 'package:cockpit/app/cockpit/domain/entities/browser_capability.dart';
 import 'package:cockpit/app/cockpit/domain/entities/db_connection.dart';
 import 'package:cockpit/app/cockpit/ui/actions/tab_actions.dart';
 import 'package:cockpit/app/cockpit/ui/document/document_windows.dart';
+import 'package:cockpit/app/cockpit/ui/session/agent_graph_session.dart';
 import 'package:cockpit/app/cockpit/ui/session/browser_session.dart';
 import 'package:cockpit/app/cockpit/ui/session/diff_viewer_session.dart';
 import 'package:cockpit/app/cockpit/ui/session/empty_tab.dart';
@@ -23,6 +24,7 @@ import 'package:cockpit/app/cockpit/ui/states/pane_node.dart';
 import 'package:cockpit/app/cockpit/ui/viewmodels/cockpit_viewmodel.dart';
 import 'package:cockpit/app/cockpit/ui/widgets/active_listenable_builder.dart';
 import 'package:cockpit/app/cockpit/ui/widgets/adaptive_terminal_pane.dart';
+import 'package:cockpit/app/cockpit/ui/widgets/agent_graph_view.dart';
 import 'package:cockpit/app/cockpit/ui/widgets/browser_pane.dart';
 import 'package:cockpit/app/cockpit/ui/widgets/confirm_dialog.dart';
 import 'package:cockpit/app/cockpit/ui/widgets/db_engine_icon.dart';
@@ -213,6 +215,7 @@ IconData _tabIcon(PaneItem? item) {
   if (item is RedisBrowserSession) return Icons.grid_on_outlined;
   if (item is MongoBrowserSession) return Icons.data_object_outlined;
   if (item is NotebookSession) return Icons.menu_book_outlined;
+  if (item is AgentGraphSession) return Icons.hub_outlined;
   if (item is EmptyTab) return Icons.edit_outlined;
   return Icons.auto_awesome;
 }
@@ -1686,6 +1689,11 @@ class _PaneBodyState extends State<_PaneBody> {
     // Navegador embutido (plano 58): toolbar compacta + webview inline.
     if (item is BrowserSession) {
       return BrowserPane(session: item, active: widget.active);
+    }
+
+    // Grafo de agentes do workspace: canvas com nós e cabos.
+    if (item is AgentGraphSession) {
+      return AgentGraphView(session: item);
     }
 
     // Caderno `.notebook` (plano 62, passo 4): lista de notas | nota | tags.
